@@ -1,0 +1,38 @@
+{
+  "name": "tagsakay-workers",
+  "version": "1.0.0",
+  "description": "TagSakay RFID Backend on Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "start": "wrangler dev",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx ./src/db/migrate.ts",
+    "push": "drizzle-kit push",
+    "studio": "drizzle-kit studio",
+    "seed": "tsx seed.ts",
+    "db:setup": "npm run migrate && npm run seed"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "bcryptjs": "^3.0.2",
+    "drizzle-orm": "^0.44.7",
+    "hono": "^4.10.4",
+    "jose": "^6.1.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "@types/node": "^24.9.2",
+    "@types/ws": "^8.18.1",
+    "dotenv": "^16.4.7",
+    "drizzle-kit": "^0.31.6",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.19.2",
+    "wrangler": "^4.45.3"
+  },
+  "overrides": {
+    "esbuild": "^0.25.12"
+  }
+}
