@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from "vue-router";
 import { ref, watchEffect, onMounted, computed } from "vue";
-import Navbar from "./components/Navbar.vue";
+import SidebarLayout from "./components/SidebarLayout.vue";
 import authService from "./services/auth";
 
 const router = useRouter();
 const route = useRoute();
 const isLoggedIn = ref(authService.isLoggedIn());
 
-// Check if current route is the dashboard (for special layout)
-const isDashboardRoute = computed(() => {
-  return route.path === "/dashboard";
+// Check if current route requires authentication
+const isAuthRoute = computed(() => {
+  return route.path !== "/login" && route.path !== "/register";
 });
 
 // Listen for changes in localStorage to update isLoggedIn reactively
@@ -26,8 +26,8 @@ const checkAuthentication = () => {
   // If not logged in and not on login or register page, redirect to login
   if (
     !isLoggedIn.value &&
-    router.currentRoute.value.path !== "/login" &&
-    router.currentRoute.value.path !== "/register"
+    route.path !== "/login" &&
+    route.path !== "/register"
   ) {
     router.push("/login");
   }
@@ -42,15 +42,12 @@ onMounted(checkAuthentication);
 
 <template>
   <div class="min-h-screen bg-base-100">
-    <!-- Show the navbar only when logged in AND not on dashboard route -->
-    <Navbar v-if="isLoggedIn && !isDashboardRoute" />
-
-    <!-- For dashboard, don't wrap in container since it has its own layout -->
-    <template v-if="isDashboardRoute">
+    <!-- Use sidebar layout for authenticated routes -->
+    <SidebarLayout v-if="isLoggedIn && isAuthRoute">
       <RouterView />
-    </template>
+    </SidebarLayout>
 
-    <!-- For other pages, maintain current layout with container -->
+    <!-- Use simple layout for login/register pages -->
     <main v-else class="container mx-auto px-4 py-8">
       <RouterView />
     </main>

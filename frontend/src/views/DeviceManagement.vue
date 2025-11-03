@@ -5,35 +5,13 @@
         ESP32 Device Management
       </h1>
 
-      <!-- Registration Form -->
+      <!-- Quick Registration Link -->
       <div
         class="bg-white p-6 rounded-lg shadow-md mb-8 border border-gray-200"
       >
         <h2 class="text-xl font-semibold mb-4 text-gray-900">
-          Register New Device
+          Device Registration
         </h2>
-        <!-- Error message -->
-        <div
-          v-if="error"
-          class="mb-4 p-4 bg-red-50 border border-red-200 rounded-md"
-        >
-          <div class="flex">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5 text-red-400 mr-2"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            <p class="text-red-800">{{ error }}</p>
-          </div>
-        </div>
-
         <div class="alert alert-info mb-4">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -49,148 +27,35 @@
             ></path>
           </svg>
           <div>
-            <span class="font-bold">Automatic API Key Generation:</span>
+            <span class="font-bold">Dedicated Registration Flow:</span>
             <p class="mt-1">
-              When you register a device, an API key will be automatically
-              generated. You'll see the key after successful registration - make
-              sure to save it.
+              Use our streamlined device registration wizard for the best
+              experience with enhanced validation, API key management, and
+              connectivity testing.
             </p>
           </div>
         </div>
-        <form @submit.prevent="registerDevice">
-          <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div>
-              <label class="block text-sm font-medium text-gray-900"
-                >MAC Address</label
-              >
-              <input
-                v-model="newDevice.macAddress"
-                type="text"
-                class="mt-1 block w-full rounded-md border-2 border-gray-400 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900"
-                placeholder="Format: XX:XX:XX:XX:XX:XX"
-                pattern="^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
-                title="Please enter a valid MAC address (format: XX:XX:XX:XX:XX:XX)"
-                required
-              />
-              <p class="mt-1 text-sm text-gray-800">
-                Enter the MAC address of the ESP32 device
-              </p>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-900"
-                >Device Name</label
-              >
-              <input
-                v-model="newDevice.name"
-                type="text"
-                class="mt-1 block w-full rounded-md border-2 border-gray-400 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900"
-                required
-              />
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-900"
-                >Location</label
-              >
-              <input
-                v-model="newDevice.location"
-                type="text"
-                class="mt-1 block w-full rounded-md border-2 border-gray-400 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900"
-                required
-              />
-              <p class="mt-1 text-sm text-gray-800">
-                Where this device is installed
-              </p>
-            </div>
-          </div>
-
-          <div class="mt-6">
-            <button
-              type="submit"
-              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              :disabled="loading"
-            >
-              <span v-if="loading" class="mr-2">
-                <svg
-                  class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    class="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    stroke-width="4"
-                  ></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-              </span>
-              Register Device
-            </button>
-          </div>
-        </form>
-
-        <!-- API Key Display -->
-        <div
-          v-if="createdApiKey"
-          class="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg"
-        >
-          <div class="flex items-center mb-2">
+        <div class="flex items-center justify-center">
+          <router-link
+            to="/devices/register"
+            class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5 text-green-500 mr-2"
-              viewBox="0 0 20 20"
-              fill="currentColor"
+              class="h-5 w-5 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
             >
               <path
-                fill-rule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clip-rule="evenodd"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
               />
             </svg>
-            <h3 class="text-lg font-medium text-green-800">
-              Device Registered Successfully!
-            </h3>
-          </div>
-          <p class="text-sm text-green-700 mb-3">
-            An API key was automatically generated for your device. Make sure to
-            save it now - it won't be shown again!
-          </p>
-          <div
-            class="bg-white p-3 rounded border border-green-300 font-mono text-sm break-all text-gray-900"
-          >
-            {{ createdApiKey }}
-          </div>
-          <div class="mt-3 flex justify-end">
-            <button
-              @click="copyToClipboard(createdApiKey)"
-              class="inline-flex items-center px-3 py-1.5 border border-green-500 text-xs font-medium rounded text-green-700 bg-white hover:bg-green-50"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 mr-1"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-                />
-              </svg>
-              Copy API Key
-            </button>
-          </div>
+            Register New Device
+          </router-link>
         </div>
       </div>
 
@@ -454,21 +319,13 @@
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, onUnmounted } from "vue";
-import deviceService, {
-  type Device,
-  type RegisterDeviceRequest,
-} from "../services/device";
+import deviceService, { type Device } from "../services/device";
 
 export default defineComponent({
   name: "DeviceManagement",
 
   setup() {
     const devices = ref<Device[]>([]);
-    const newDevice = ref<RegisterDeviceRequest>({
-      macAddress: "",
-      name: "",
-      location: "",
-    });
     const loading = ref(false);
     const error = ref<string | null>(null);
     const success = ref<string | null>(null);
@@ -482,80 +339,6 @@ export default defineComponent({
         devices.value = await deviceService.getAllDevices();
       } catch (err) {
         error.value = "Failed to fetch devices";
-        console.error(err);
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    // For storing the newly created API key
-    const createdApiKey = ref("");
-
-    // Copy API key to clipboard
-    const copyToClipboard = async (text: string) => {
-      try {
-        await navigator.clipboard.writeText(text);
-        success.value = "API key copied to clipboard!";
-        setTimeout(() => {
-          if (success.value === "API key copied to clipboard!") {
-            success.value = null;
-          }
-        }, 3000);
-      } catch (err) {
-        console.error("Failed to copy text: ", err);
-        error.value =
-          "Failed to copy to clipboard. Please try manually selecting and copying the text.";
-      }
-    };
-
-    // Register a new device
-    const registerDevice = async () => {
-      try {
-        // Basic validation
-        if (
-          !newDevice.value.macAddress.match(
-            /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/
-          )
-        ) {
-          error.value =
-            "Please enter a valid MAC address in format XX:XX:XX:XX:XX:XX";
-          return;
-        }
-
-        if (!newDevice.value.name || newDevice.value.name.trim().length < 2) {
-          error.value =
-            "Please enter a valid device name (minimum 2 characters)";
-          return;
-        }
-
-        if (
-          !newDevice.value.location ||
-          newDevice.value.location.trim().length < 2
-        ) {
-          error.value = "Please specify a location for this device";
-          return;
-        }
-
-        loading.value = true;
-        error.value = null;
-        const response = await deviceService.registerDevice(newDevice.value);
-
-        // Store API key for display
-        if (response?.apiKey?.fullKey) {
-          createdApiKey.value = response.apiKey.fullKey;
-        }
-
-        // Reset form
-        newDevice.value = {
-          macAddress: "",
-          name: "",
-          location: "",
-        };
-
-        // Refresh device list
-        await fetchDevices();
-      } catch (err) {
-        error.value = "Failed to register device";
         console.error(err);
       } finally {
         loading.value = false;
@@ -698,19 +481,15 @@ export default defineComponent({
 
     return {
       devices,
-      newDevice,
       loading,
       error,
       success,
-      createdApiKey,
       deviceToDelete,
       showDeleteModal,
       fetchDevices,
-      registerDevice,
       enableRegistrationMode,
       disableRegistrationMode,
       formatDate,
-      copyToClipboard,
       confirmDelete,
       deleteDevice,
       toggleDeviceStatus,

@@ -114,7 +114,7 @@ const loadRfidCards = async () => {
 
   try {
     const response = await rfidService.getAllRfidCards();
-    rfidCards.value = response.data;
+    rfidCards.value = response;
   } catch (err) {
     console.error("Error fetching RFID cards:", err);
     error.value = "Failed to load RFID cards";
@@ -127,7 +127,7 @@ const loadRfidCards = async () => {
 const loadUsers = async () => {
   try {
     const response = await userService.getUsers();
-    users.value = response.data;
+    users.value = response;
   } catch (err) {
     console.error("Error fetching users:", err);
     error.value = "Failed to load users";
@@ -221,9 +221,9 @@ const startPollingForNewTag = () => {
       // Reset fail count on success
       pollFailCount = 0;
 
-      if (response.success && response.data && response.data.length > 0) {
+      if (response && response.length > 0) {
         // Take the most recent scan
-        const latestScan = response.data[0];
+        const latestScan = response[0];
 
         // Stop polling
         stopPollingForNewTag();
