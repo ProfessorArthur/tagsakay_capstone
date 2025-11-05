@@ -235,4 +235,4 @@ Always verify user permissions before database operations and maintain separatio
 
 ### Note
 
-If a markdown is created, always put it inside the markdowns folder.
+If a markdown is created, always put it inside the markdowns folder. Otherwise, stop creating markdowns when changing minute functions or small code snippets.

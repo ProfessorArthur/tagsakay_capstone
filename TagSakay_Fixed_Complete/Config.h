@@ -75,43 +75,54 @@
 // API Configuration
 // =======================
 
-// PRODUCTION Configuration (uses custom domain api.tagsakay.com)
+// PRODUCTION Configuration (WebSocket + HTTP Fallback)
+// Uses custom domain api.tagsakay.com (live as of Nov 5, 2025)
+// Falls back to: tagsakay-api-production.maskedmyles.workers.dev if DNS issues
+
+// WebSocket Configuration (Primary)
 #ifndef WS_HOST
-  #define WS_HOST "api.tagsakay.com"  // Production API domain
+  // Production: Using custom domain api.tagsakay.com
+  #define WS_HOST "api.tagsakay.com"  // Custom domain (primary)
 #endif
 
 #ifndef WS_PORT
-  #define WS_PORT 443  // HTTPS/WSS standard port
+  #define WS_PORT 443  // HTTPS/WSS standard port (Cloudflare)
 #endif
 
 #ifndef WS_PATH
-  #define WS_PATH "/ws/device"  // WebSocket endpoint
+  #define WS_PATH "/ws/device"  // WebSocket endpoint path
 #endif
 
 #define WS_RECONNECT_INTERVAL 5000   // Reconnect every 5 seconds if disconnected
 #define WS_PING_INTERVAL 30000       // Send heartbeat every 30 seconds
 #define WS_ENABLED true              // Enable WebSocket (set false to use HTTP only)
-#define USE_SECURE_WS true           // Production uses HTTPS/WSS (secure WebSocket)
+#define USE_SECURE_WS true           // Production: Use secure HTTPS/WSS
 
-// HTTP endpoint (fallback when WebSocket unavailable)
+// HTTP Fallback Configuration
+// Used when WebSocket is unavailable or disabled
 #ifndef API_BASE_URL
-  #define API_BASE_URL "https://api.tagsakay.com"  // Production API URL
+  #define API_BASE_URL "https://api.tagsakay.com"  // HTTP fallback URL (custom domain)
 #endif
 
 #ifndef API_DEFAULT_KEY
-  #define API_DEFAULT_KEY ""  // Set your default API key here (or configure via Serial)
+  #define API_DEFAULT_KEY ""  // Set your device API key here (or configure via Serial)
 #endif
 
 #define API_TIMEOUT_MS 5000
 #define API_RETRY_ATTEMPTS 3
 #define MAX_CONSECUTIVE_FAILURES 5
 
-// DEVELOPMENT Configuration (uncomment for local testing)
-// Comment out production config above and uncomment these lines:
-// #define WS_HOST "192.168.1.100"  // Replace with your local dev machine IP
+// ===== LOCAL DEVELOPMENT Configuration (COMMENTED OUT) =====
+// For local testing, comment out production config above and uncomment:
+//
+// #define WS_HOST "192.168.1.100"  // Your computer IP running: npm run dev
 // #define WS_PORT 8787              // Local Cloudflare Workers dev port
-// #define USE_SECURE_WS false       // Local uses HTTP/WS (non-secure)
-// #define API_BASE_URL "http://192.168.1.100:8787"  // Local dev URL
+// #define WS_PATH "/ws/device"
+// #define USE_SECURE_WS false       // Local development uses HTTP/WS (non-secure)
+// #define API_BASE_URL "http://192.168.1.100:8787"  // Local dev HTTP URL
+//
+// To find your local IP: ipconfig (Windows) or ifconfig (Mac/Linux)
+// Then run backend: cd backend-workers && npm run dev
 
 // =======================
 // Network Configuration
@@ -151,6 +162,17 @@
 #define DEVICE_NAME "TagSakay Scanner"
 #define DEVICE_VERSION "2.0"
 #define FIRMWARE_VERSION "2.0.0"
+
+// Production Device API Key Setup:
+// 1. Login to admin panel at: https://tagsakay-frontend.pages.dev
+// 2. Navigate to: Settings → API Keys Management
+// 3. Click: "Create New API Key"
+// 4. Provide:
+//    - Name: "Gate Scanner #1" (or similar)
+//    - Device ID: (auto-filled with MAC address when device registers)
+//    - Permissions: ["scan", "register"]
+// 5. Copy the API Key (shown only once!)
+// 6. Set below in API_DEFAULT_KEY or configure via Serial menu
 
 // =======================
 // Memory & Performance

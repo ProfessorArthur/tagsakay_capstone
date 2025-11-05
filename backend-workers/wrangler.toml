@@ -8,29 +8,35 @@ compatibility_date = "2024-01-01"
 
 [env.production]
 name = "tagsakay-api-production"
+# Custom domain is now live (configured Nov 5, 2025)
 routes = [
   { pattern = "api.tagsakay.com/*", custom_domain = true }
 ]
+
+# Note: Durable Objects require paid plan. WebSocket logic will use alternative approach.
+# [[env.production.durable_objects.bindings]]
+# name = "DEVICE_CONNECTIONS"
+# class_name = "DeviceConnection"
+# script_name = "tagsakay-api-production"
+
+# [[env.production.migrations]]
+# tag = "v1"
+# new_classes = ["DeviceConnection"]
 
 [env.development]
 name = "tagsakay-api-development"
 # Development uses .dev.vars and runs locally on port 8787
 
-[env.staging]
-name = "tagsakay-api-staging"
-
-# Durable Objects for WebSocket connections
-[[durable_objects.bindings]]
+# Durable Objects for WebSocket connections (development only)
+[[env.development.durable_objects.bindings]]
 name = "DEVICE_CONNECTIONS"
 class_name = "DeviceConnection"
-script_name = "tagsakay-api"
+script_name = "tagsakay-api-development"
 
-[[migrations]]
+[[env.development.migrations]]
 tag = "v1"
 new_classes = ["DeviceConnection"]
 
-# Bindings (if using D1, KV, R2, etc. - optional)
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "tagsakay"
-# database_id = "xxx"
+[env.staging]
+name = "tagsakay-api-staging"
+# Staging environment configuration

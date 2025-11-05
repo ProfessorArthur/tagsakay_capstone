@@ -42,7 +42,7 @@ const loadApiKeys = async () => {
 
   try {
     const response = await apiKeyService.listApiKeys();
-    apiKeys.value = response || [];
+    apiKeys.value = response.data || [];
   } catch (err: any) {
     error.value = err.response?.data?.message || "Failed to load API keys.";
   } finally {
@@ -84,7 +84,7 @@ const createApiKey = async () => {
     // Extract the API key and push to list
     if (response.success && response.data) {
       const newKey = response.data;
-      createdKey.value = newKey.apiKey; // Backend returns apiKey, not key
+      createdKey.value = newKey.key; // Backend returns key field
 
       // Add to list without the full API key
       apiKeys.value.push({

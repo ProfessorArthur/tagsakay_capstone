@@ -112,26 +112,26 @@ const rfidService = {
   /**
    * Get unregistered RFID cards (scanned but not registered)
    */
-  async getUnregisteredCards(): Promise<any[]> {
+  async getUnregisteredCards(): Promise<ApiResponse<Rfid[]>> {
     try {
       const response = await apiClient.get("/rfid/unregistered");
-      return response.data || [];
+      return response.data || { success: false, data: [] };
     } catch (error: any) {
       console.error("Failed to fetch unregistered cards:", error);
-      return []; // Return empty array on error
+      return { success: false, data: [] }; // Return empty array on error
     }
   },
 
   /**
    * Get all registered RFID cards
    */
-  async getAllRfidCards(): Promise<Rfid[]> {
+  async getAllRfidCards(): Promise<ApiResponse<Rfid[]>> {
     try {
       const response = await apiClient.get("/rfid");
-      return response.data || [];
+      return response.data || { success: false, data: [] };
     } catch (error: any) {
       console.error("Failed to fetch all RFID cards:", error);
-      return []; // Return empty array on error
+      return { success: false, data: [] }; // Return empty array on error
     }
   },
 
@@ -155,13 +155,13 @@ const rfidService = {
   /**
    * Get recent unregistered scans (for registration workflow)
    */
-  async getRecentUnregisteredScans(): Promise<any[]> {
+  async getRecentUnregisteredScans(): Promise<ApiResponse<RfidScan[]>> {
     try {
       const response = await apiClient.get("/rfid/scans/unregistered");
-      return response.data || [];
+      return response.data || { success: false, data: [] };
     } catch (error: any) {
       console.error("Failed to fetch recent unregistered scans:", error);
-      return []; // Return empty array on error to prevent component crashes
+      return { success: false, data: [] }; // Return empty array on error to prevent component crashes
     }
   },
 

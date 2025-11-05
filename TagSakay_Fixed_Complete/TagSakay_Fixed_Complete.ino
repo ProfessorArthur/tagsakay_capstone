@@ -19,17 +19,17 @@
 
 // Configuration instances (definitions)
 WiFiConfig wifiConfig = {
-  "SSID",
-  "Password",
-  10,
-  5000
+  "SSID",           // Replace with your WiFi SSID
+  "Password",       // Replace with your WiFi password
+  10,               // Max reconnection attempts
+  5000              // Retry delay (ms)
 };
 
 ServerConfig serverConfig = {
-  "http://192.168.1.73:8787",  // Cloudflare Workers backend (HTTP fallback)
-  "de271a_09e103534510b7bf7700d847994c8c6c3433e4214598912db1773a4108df1852",
-  10000,
-  "Entrance Gate"
+  "https://tagsakay-api-production.maskedmyles.workers.dev",  // Production backend URL
+  "",  // Device API key (set in Config.h or via Serial menu)
+  10000,  // HTTP timeout (ms)
+  "Entrance Gate"  // Device location (configurable)
 };
 
 NTPConfig ntpConfig = {

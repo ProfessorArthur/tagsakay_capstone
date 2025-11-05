@@ -114,7 +114,7 @@ const loadRfidCards = async () => {
 
   try {
     const response = await rfidService.getAllRfidCards();
-    rfidCards.value = response;
+    rfidCards.value = response.data || [];
   } catch (err) {
     console.error("Error fetching RFID cards:", err);
     error.value = "Failed to load RFID cards";
@@ -127,7 +127,7 @@ const loadRfidCards = async () => {
 const loadUsers = async () => {
   try {
     const response = await userService.getUsers();
-    users.value = response;
+    users.value = response.data || [];
   } catch (err) {
     console.error("Error fetching users:", err);
     error.value = "Failed to load users";
@@ -221,20 +221,20 @@ const startPollingForNewTag = () => {
       // Reset fail count on success
       pollFailCount = 0;
 
-      if (response && response.length > 0) {
+      if (response.data && response.data.length > 0) {
         // Take the most recent scan
-        const latestScan = response[0];
+        const latestScan = response.data[0];
 
         // Stop polling
         stopPollingForNewTag();
 
         // Update form with the scanned tag
-        formData.value.tagId = latestScan.tagId;
+        formData.value.tagId = latestScan.rfidTagId;
 
         // Update state
-        pendingRegistration.value = latestScan.tagId;
+        pendingRegistration.value = latestScan.rfidTagId;
         awaitingConfirmation.value = false;
-        success.value = `New tag detected: ${latestScan.tagId}! Please complete the registration form.`;
+        success.value = `New tag detected: ${latestScan.rfidTagId}! Please complete the registration form.`;
 
         // Turn off registration mode on devices
         if (activeDevices.value.length > 0) {

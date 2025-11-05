@@ -67,10 +67,10 @@ const validateName = (name: string): { valid: boolean; error?: string } => {
 };
 
 // Get all users
-const getUsers = async (): Promise<User[]> => {
+const getUsers = async (): Promise<ApiResponse<User[]>> => {
   try {
     const response = await apiClient.get("/users");
-    return response.data;
+    return response.data || { success: false, data: [] };
   } catch (error: any) {
     console.error("Failed to fetch users:", error);
     throw new Error(error.message || "Failed to fetch users");

@@ -44,7 +44,7 @@ async function fetchUsers() {
 
   try {
     const response = await userService.getUsers();
-    users.value = response.data;
+    users.value = response.data || [];
   } catch (err) {
     error.value = "Failed to load users. Please try again.";
     console.error("Error fetching users:", err);

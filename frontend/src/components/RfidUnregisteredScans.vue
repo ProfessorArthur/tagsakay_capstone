@@ -112,7 +112,7 @@ const getRecentUnregisteredScans = async () => {
 
     const response = await rfidService.getRecentUnregisteredScans();
 
-    if (response.data && Array.isArray(response.data)) {
+    if (response.success && response.data && Array.isArray(response.data)) {
       // Add new scans without removing old ones, but avoid duplicates
       const existingIds = new Set(scans.value.map((scan) => scan.id));
       const newScans = response.data.filter(
