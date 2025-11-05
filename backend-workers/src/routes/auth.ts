@@ -63,8 +63,11 @@ app.post("/login", authRateLimit, async (c) => {
   const body = await c.req.json();
   const { email, password } = body;
 
+  // Normalize email to lowercase for consistent lookups
+  const normalizedEmail = email?.toLowerCase() || "";
+
   // Input validation
-  const emailValidation = validateEmail(email);
+  const emailValidation = validateEmail(normalizedEmail);
   if (!emailValidation.valid) {
     logValidationFailure(
       "/api/auth/login",
@@ -80,7 +83,7 @@ app.post("/login", authRateLimit, async (c) => {
     );
   }
 
-  if (!email || !password) {
+  if (!normalizedEmail || !password) {
     logValidationFailure("/api/auth/login", ["Missing credentials"], ipAddress);
     return c.json(
       {
@@ -92,12 +95,12 @@ app.post("/login", authRateLimit, async (c) => {
   }
 
   // Check if account is locked due to failed attempts
-  const lockStatus = checkAccountLock(email);
+  const lockStatus = checkAccountLock(normalizedEmail);
   if (lockStatus.locked) {
     const remainingTime = Math.ceil(
       (lockStatus.lockedUntil! - Date.now()) / 1000 / 60
     );
-    logLoginFailure(email, "Account locked", ipAddress, userAgent);
+    logLoginFailure(normalizedEmail, "Account locked", ipAddress, userAgent);
 
     return c.json(
       {
@@ -113,13 +116,13 @@ app.post("/login", authRateLimit, async (c) => {
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (!user) {
     // Record failed attempt (even for non-existent users to prevent enumeration)
-    recordFailedLogin(email);
-    logLoginFailure(email, "User not found", ipAddress, userAgent);
+    recordFailedLogin(normalizedEmail);
+    logLoginFailure(normalizedEmail, "User not found", ipAddress, userAgent);
 
     return c.json(
       {
@@ -134,11 +137,11 @@ app.post("/login", authRateLimit, async (c) => {
   const isValid = await verifyPassword(password, user.password);
 
   if (!isValid) {
-    const attemptResult = recordFailedLogin(email);
-    logLoginFailure(email, "Invalid password", ipAddress, userAgent);
+    const attemptResult = recordFailedLogin(normalizedEmail);
+    logLoginFailure(normalizedEmail, "Invalid password", ipAddress, userAgent);
 
     if (attemptResult.locked) {
-      logAccountLocked(email, 15 * 60 * 1000, ipAddress);
+      logAccountLocked(normalizedEmail, 15 * 60 * 1000, ipAddress);
 
       return c.json(
         {
@@ -161,11 +164,29 @@ app.post("/login", authRateLimit, async (c) => {
 
   // Check if account is active
   if (!user.isActive) {
-    logLoginFailure(email, "Account inactive", ipAddress, userAgent);
+    logLoginFailure(normalizedEmail, "Account inactive", ipAddress, userAgent);
     return c.json(
       {
         success: false,
         message: "Account is inactive. Please contact support.",
+      },
+      403
+    );
+  }
+
+  // Check if email is verified
+  if (!user.isEmailVerified) {
+    logLoginFailure(
+      normalizedEmail,
+      "Email not verified",
+      ipAddress,
+      userAgent
+    );
+    return c.json(
+      {
+        success: false,
+        message:
+          "Please verify your email before logging in. Check your inbox for the verification code.",
       },
       403
     );
@@ -185,10 +206,10 @@ app.post("/login", authRateLimit, async (c) => {
     );
 
     // Reset failed login attempts on successful login
-    resetLoginAttempts(email);
+    resetLoginAttempts(normalizedEmail);
 
     // Log successful login
-    logLoginSuccess(email, ipAddress, userAgent);
+    logLoginSuccess(normalizedEmail, ipAddress, userAgent);
 
     return c.json({
       success: true,
@@ -265,6 +286,9 @@ app.post("/register", authRateLimit, async (c) => {
     rfidTag,
   } = validation.sanitized!;
 
+  // Normalize email to lowercase for consistent lookups
+  const normalizedEmail = email.toLowerCase();
+
   // Check password strength (without MFA, min 15 chars recommended)
   const passwordCheck = validatePasswordStrength(password, false);
   if (!passwordCheck.isValid) {
@@ -272,7 +296,7 @@ app.post("/register", authRateLimit, async (c) => {
       "/api/auth/register",
       passwordCheck.errors,
       ipAddress,
-      email
+      normalizedEmail
     );
     return c.json(
       {
@@ -288,7 +312,7 @@ app.post("/register", authRateLimit, async (c) => {
   const [existingUser] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (existingUser) {
@@ -315,7 +339,7 @@ app.post("/register", authRateLimit, async (c) => {
         "/api/auth/register",
         ["RFID tag already assigned"],
         ipAddress,
-        email
+        normalizedEmail
       );
       return c.json(
         {
@@ -333,27 +357,28 @@ app.post("/register", authRateLimit, async (c) => {
 
     // Generate 6-digit verification code
     const verificationCode = Math.random().toString().substring(2, 8);
+    const hashedVerificationCode = await hashPassword(verificationCode); // Hash code for storage
     const expiryTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     const [newUser] = await db
       .insert(users)
       .values({
         name,
-        email,
+        email: normalizedEmail,
         password: hashedPassword,
         role: role as "superadmin" | "admin" | "driver",
         rfidTag: rfidTag || null,
         isActive: true,
         isEmailVerified: false, // Not verified yet
-        verificationCode,
+        verificationCode: hashedVerificationCode, // Store hashed code
         verificationCodeExpiry: expiryTime,
       })
       .returning();
 
-    // Send verification email
+    // Send verification email (send plaintext code to user)
     const emailResult = await sendVerificationEmail(
       c.env.RESEND_API_KEY,
-      email,
+      normalizedEmail,
       verificationCode,
       "https://tagsakay.com"
     );
@@ -367,9 +392,9 @@ app.post("/register", authRateLimit, async (c) => {
     securityLogger.log({
       eventType: SecurityEventType.LOGIN_SUCCESS,
       severity: SeverityLevel.LOW,
-      username: email,
+      username: normalizedEmail,
       ipAddress,
-      message: `New user registered (awaiting email verification): ${email}`,
+      message: `New user registered (awaiting email verification): ${normalizedEmail}`,
     });
 
     // Return response - user is registered but not verified yet
@@ -390,7 +415,7 @@ app.post("/register", authRateLimit, async (c) => {
     securityLogger.log({
       eventType: SecurityEventType.ERROR,
       severity: SeverityLevel.HIGH,
-      username: email,
+      username: normalizedEmail,
       ipAddress,
       message: "Registration failed",
       metadata: { error: error.message },
@@ -407,15 +432,19 @@ app.post("/register", authRateLimit, async (c) => {
 });
 
 // POST /api/auth/verify-email - Verify email with code
-app.post("/verify-email", async (c) => {
+// Apply rate limiting to prevent brute-force attacks on 6-digit code
+app.post("/verify-email", authRateLimit, async (c) => {
   const db = c.get("db");
   const ipAddress = getIpAddress(c);
 
   const body = await c.req.json();
   const { email, code } = body;
 
+  // Normalize email to lowercase
+  const normalizedEmail = email?.toLowerCase() || "";
+
   // Validate inputs
-  if (!email || !code) {
+  if (!normalizedEmail || !code) {
     return c.json(
       {
         success: false,
@@ -429,7 +458,7 @@ app.post("/verify-email", async (c) => {
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(eq(users.email, normalizedEmail))
       .limit(1);
 
     if (!user) {
@@ -437,7 +466,7 @@ app.post("/verify-email", async (c) => {
         "/api/auth/verify-email",
         ["User not found"],
         ipAddress,
-        email
+        normalizedEmail
       );
       return c.json(
         {
@@ -458,23 +487,7 @@ app.post("/verify-email", async (c) => {
       );
     }
 
-    // Check if code matches and not expired
-    if (user.verificationCode !== code) {
-      logValidationFailure(
-        "/api/auth/verify-email",
-        ["Invalid verification code"],
-        ipAddress,
-        email
-      );
-      return c.json(
-        {
-          success: false,
-          message: "Invalid verification code",
-        },
-        400
-      );
-    }
-
+    // Check if code has expired first
     if (
       !user.verificationCodeExpiry ||
       new Date() > user.verificationCodeExpiry
@@ -483,6 +496,25 @@ app.post("/verify-email", async (c) => {
         {
           success: false,
           message: "Verification code has expired. Please register again.",
+        },
+        400
+      );
+    }
+
+    // Verify hashed code (compare submitted code with stored hash)
+    const codeIsValid = await verifyPassword(code, user.verificationCode || "");
+
+    if (!codeIsValid) {
+      logValidationFailure(
+        "/api/auth/verify-email",
+        ["Invalid verification code"],
+        ipAddress,
+        normalizedEmail
+      );
+      return c.json(
+        {
+          success: false,
+          message: "Invalid verification code",
         },
         400
       );
@@ -514,9 +546,9 @@ app.post("/verify-email", async (c) => {
     securityLogger.log({
       eventType: SecurityEventType.LOGIN_SUCCESS,
       severity: SeverityLevel.LOW,
-      username: email,
+      username: normalizedEmail,
       ipAddress,
-      message: `Email verified: ${email}`,
+      message: `Email verified: ${normalizedEmail}`,
     });
 
     return c.json({
