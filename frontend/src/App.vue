@@ -23,11 +23,12 @@ window.addEventListener("storage", () => {
 const checkAuthentication = () => {
   isLoggedIn.value = authService.isLoggedIn();
 
-  // If not logged in and not on login or register page, redirect to login
+  // If not logged in and not on login, register, or verify-email page, redirect to login
   if (
     !isLoggedIn.value &&
     route.path !== "/login" &&
-    route.path !== "/register"
+    route.path !== "/register" &&
+    route.path !== "/verify-email"
   ) {
     router.push("/login");
   }

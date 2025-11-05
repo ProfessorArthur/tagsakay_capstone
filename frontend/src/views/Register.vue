@@ -14,6 +14,7 @@ const userData = ref<RegisterData>({
 const confirmPassword = ref("");
 const loading = ref(false);
 const error = ref("");
+const success = ref(""); // Add success message
 const showPassword = ref(false);
 const showConfirmPassword = ref(false);
 
@@ -86,22 +87,38 @@ const register = async () => {
   try {
     const response = await authService.register(userData.value);
 
-    // Check if email verification is required (new response structure)
-    if (response?.data?.verified === false) {
-      // Redirect to verify-email page with email in query params
-      router.push({
-        name: "VerifyEmail",
-        query: { email: response.data.email },
-      });
-    } else if (response?.data?.token) {
+    // Check if email verification is required
+    // Note: API interceptor extracts 'data' field, so response IS the data
+    if (response?.verified === false) {
+      // Show success message
+      success.value = `✅ Account created! Check your email (${response.email}) for the verification code.`;
+      error.value = "";
+
+      // Wait 2 seconds, then redirect
+      setTimeout(() => {
+        router.push({
+          name: "VerifyEmail",
+          query: { email: response.email },
+        });
+      }, 2000);
+    } else if (response?.token) {
       // Legacy: if token is present, user is verified
-      authService.saveUserData(response.data);
-      router.push("/dashboard");
+      success.value = "✅ Registration successful!";
+      authService.saveUserData(response);
+
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1000);
     } else {
-      // Fallback for backward compatibility
-      router.push("/dashboard");
+      // Fallback - show message
+      success.value = "✅ Registration successful! Redirecting...";
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1000);
     }
   } catch (err: any) {
+    success.value = ""; // Clear success on error
+
     // Handle validation errors with detailed feedback
     if (err.response?.status === 400) {
       error.value =
@@ -146,6 +163,23 @@ const register = async () => {
             />
           </svg>
           <span>{{ error }}</span>
+        </div>
+
+        <div v-if="success" class="alert alert-success mb-6" role="alert">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-6 w-6 shrink-0 stroke-current"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <span>{{ success }}</span>
         </div>
 
         <form @submit.prevent="register" class="space-y-6">
