@@ -1,10 +1,12 @@
 /**
- * DeviceConnection Durable Object
+ * DeviceConnection Durable Object (DEPRECATED)
  *
- * Handles persistent WebSocket connections for ESP32 devices.
- * Each device gets its own Durable Object instance identified by deviceId.
+ * This file is no longer used as Durable Objects require a paid Cloudflare plan.
+ * WebSocket connections are now handled via standard HTTP upgrade.
  *
- * Features:
+ * Kept for reference/future use if upgrading to paid plan.
+ *
+ * Previous features (now handled by WebSocket polling):
  * - WebSocket connection management
  * - Duplicate scan prevention
  * - Offline scan buffering

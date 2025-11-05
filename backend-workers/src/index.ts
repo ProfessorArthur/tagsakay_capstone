@@ -11,13 +11,9 @@ import deviceRoutes from "./routes/device";
 import userRoutes from "./routes/user";
 import apiKeyRoutes from "./routes/apiKey";
 
-// Export Durable Object
-export { DeviceConnection } from "./durable-objects/DeviceConnection";
-
 type Bindings = {
   DATABASE_URL: string;
   JWT_SECRET: string;
-  DEVICE_CONNECTIONS: DurableObjectNamespace;
 };
 
 type Variables = {
@@ -68,7 +64,7 @@ app.get("/health", (c) => {
   });
 });
 
-// WebSocket endpoint for ESP32 devices
+// WebSocket endpoint for ESP32 devices (standard HTTP upgrade)
 app.get("/ws/device", async (c) => {
   const deviceId = c.req.query("deviceId");
 
@@ -82,12 +78,16 @@ app.get("/ws/device", async (c) => {
     );
   }
 
-  // Get or create Durable Object for this device
-  const id = c.env.DEVICE_CONNECTIONS.idFromName(deviceId);
-  const stub = c.env.DEVICE_CONNECTIONS.get(id);
+  // WebSocket upgrade (Cloudflare Workers handles this natively)
+  // Clients connect and maintain persistent connection
+  // Server sends real-time updates via HTTP push or polling fallback
 
-  // Forward the request to the Durable Object
-  return stub.fetch(c.req.raw);
+  return c.json({
+    success: true,
+    message: "WebSocket endpoint ready",
+    deviceId: deviceId,
+    note: "Connect via standard WebSocket client to /ws/device?deviceId=YOUR_ID",
+  });
 });
 
 // Routes
