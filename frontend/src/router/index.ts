@@ -5,6 +5,7 @@ import authService from "../services/auth";
 // Import components
 const Login = () => import("../views/Login.vue");
 const Register = () => import("../views/Register.vue");
+const VerifyEmail = () => import("../views/VerifyEmail.vue");
 const Dashboard = () => import("../views/Dashboard.vue");
 
 const RfidCardManagement = () => import("../views/RfidCardManagement.vue");
@@ -30,6 +31,12 @@ const routes: RouteRecordRaw[] = [
     path: "/register",
     name: "Register",
     component: Register,
+    meta: { requiresGuest: true },
+  },
+  {
+    path: "/verify-email",
+    name: "VerifyEmail",
+    component: VerifyEmail,
     meta: { requiresGuest: true },
   },
   {

@@ -85,8 +85,22 @@ const register = async () => {
 
   try {
     const response = await authService.register(userData.value);
-    authService.saveUserData(response);
-    router.push("/dashboard");
+
+    // Check if email verification is required (new response structure)
+    if (response?.data?.verified === false) {
+      // Redirect to verify-email page with email in query params
+      router.push({
+        name: "VerifyEmail",
+        query: { email: response.data.email },
+      });
+    } else if (response?.data?.token) {
+      // Legacy: if token is present, user is verified
+      authService.saveUserData(response.data);
+      router.push("/dashboard");
+    } else {
+      // Fallback for backward compatibility
+      router.push("/dashboard");
+    }
   } catch (err: any) {
     // Handle validation errors with detailed feedback
     if (err.response?.status === 400) {

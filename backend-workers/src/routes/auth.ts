@@ -6,6 +6,7 @@ import {
   verifyJWT,
   validatePasswordStrength,
 } from "../lib/auth";
+import { sendVerificationEmail } from "../lib/email";
 import { users } from "../db/schema";
 import { eq } from "drizzle-orm";
 import type { Database } from "../db";
@@ -32,6 +33,7 @@ type Env = {
   Bindings: {
     DATABASE_URL: string;
     JWT_SECRET: string;
+    RESEND_API_KEY: string;
   };
   Variables: {
     db: Database;
@@ -329,6 +331,10 @@ app.post("/register", authRateLimit, async (c) => {
     // Hash password with PBKDF2
     const hashedPassword = await hashPassword(password);
 
+    // Generate 6-digit verification code
+    const verificationCode = Math.random().toString().substring(2, 8);
+    const expiryTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
     const [newUser] = await db
       .insert(users)
       .values({
@@ -338,20 +344,24 @@ app.post("/register", authRateLimit, async (c) => {
         role: role as "superadmin" | "admin" | "driver",
         rfidTag: rfidTag || null,
         isActive: true,
+        isEmailVerified: false, // Not verified yet
+        verificationCode,
+        verificationCodeExpiry: expiryTime,
       })
       .returning();
 
-    // Generate token for immediate login
-    const token = await generateJWT(
-      {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role,
-        name: newUser.name,
-      },
-      c.env.JWT_SECRET,
-      "4h"
+    // Send verification email
+    const emailResult = await sendVerificationEmail(
+      c.env.RESEND_API_KEY,
+      email,
+      verificationCode,
+      "https://tagsakay.com"
     );
+
+    if (!emailResult.success) {
+      console.error("Failed to send verification email:", emailResult.error);
+      // Don't fail registration, just log the error
+    }
 
     // Log successful registration
     securityLogger.log({
@@ -359,23 +369,19 @@ app.post("/register", authRateLimit, async (c) => {
       severity: SeverityLevel.LOW,
       username: email,
       ipAddress,
-      message: `New user registered: ${email}`,
+      message: `New user registered (awaiting email verification): ${email}`,
     });
 
+    // Return response - user is registered but not verified yet
     return c.json(
       {
         success: true,
-        message: "Registration successful",
+        message:
+          "Registration successful! Check your email to verify your account.",
         data: {
-          token,
-          expiresIn: "4h",
-          user: {
-            id: newUser.id,
-            name: newUser.name,
-            email: newUser.email,
-            role: newUser.role,
-            rfidTag: newUser.rfidTag,
-          },
+          email: newUser.email,
+          verified: false,
+          // Don't send token yet - user must verify first
         },
       },
       201
@@ -394,6 +400,154 @@ app.post("/register", authRateLimit, async (c) => {
       {
         success: false,
         message: "Registration failed. Please try again.",
+      },
+      500
+    );
+  }
+});
+
+// POST /api/auth/verify-email - Verify email with code
+app.post("/verify-email", async (c) => {
+  const db = c.get("db");
+  const ipAddress = getIpAddress(c);
+
+  const body = await c.req.json();
+  const { email, code } = body;
+
+  // Validate inputs
+  if (!email || !code) {
+    return c.json(
+      {
+        success: false,
+        message: "Email and verification code are required",
+      },
+      400
+    );
+  }
+
+  try {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (!user) {
+      logValidationFailure(
+        "/api/auth/verify-email",
+        ["User not found"],
+        ipAddress,
+        email
+      );
+      return c.json(
+        {
+          success: false,
+          message: "User not found",
+        },
+        404
+      );
+    }
+
+    if (user.isEmailVerified) {
+      return c.json(
+        {
+          success: false,
+          message: "Email already verified",
+        },
+        400
+      );
+    }
+
+    // Check if code matches and not expired
+    if (user.verificationCode !== code) {
+      logValidationFailure(
+        "/api/auth/verify-email",
+        ["Invalid verification code"],
+        ipAddress,
+        email
+      );
+      return c.json(
+        {
+          success: false,
+          message: "Invalid verification code",
+        },
+        400
+      );
+    }
+
+    if (
+      !user.verificationCodeExpiry ||
+      new Date() > user.verificationCodeExpiry
+    ) {
+      return c.json(
+        {
+          success: false,
+          message: "Verification code has expired. Please register again.",
+        },
+        400
+      );
+    }
+
+    // Mark as verified
+    await db
+      .update(users)
+      .set({
+        isEmailVerified: true,
+        verificationCode: null,
+        verificationCodeExpiry: null,
+      })
+      .where(eq(users.id, user.id));
+
+    // Generate token for login
+    const token = await generateJWT(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      },
+      c.env.JWT_SECRET,
+      "4h"
+    );
+
+    // Log successful verification
+    securityLogger.log({
+      eventType: SecurityEventType.LOGIN_SUCCESS,
+      severity: SeverityLevel.LOW,
+      username: email,
+      ipAddress,
+      message: `Email verified: ${email}`,
+    });
+
+    return c.json({
+      success: true,
+      message: "Email verified successfully",
+      data: {
+        token,
+        expiresIn: "4h",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          rfidTag: user.rfidTag,
+        },
+      },
+    });
+  } catch (error: any) {
+    securityLogger.log({
+      eventType: SecurityEventType.ERROR,
+      severity: SeverityLevel.HIGH,
+      username: email,
+      ipAddress,
+      message: "Email verification failed",
+      metadata: { error: error.message },
+    });
+
+    return c.json(
+      {
+        success: false,
+        message: "Verification failed. Please try again.",
       },
       500
     );

@@ -70,7 +70,7 @@ const authService = {
   /**
    * Register new user with password strength validation
    */
-  async register(userData: RegisterData): Promise<AuthResponse> {
+  async register(userData: RegisterData): Promise<any> {
     try {
       const response = await apiClient.post("/auth/register", userData);
       return response.data;
@@ -142,6 +142,31 @@ const authService = {
       score,
       feedback,
     };
+  },
+
+  /**
+   * Verify email with 6-digit code
+   * Called after user clicks verification link or enters code manually
+   */
+  async verifyEmail(email: string, code: string): Promise<AuthResponse> {
+    try {
+      const response = await apiClient.post("/auth/verify-email", {
+        email,
+        code,
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 400) {
+        const data = error.response.data as ApiResponse;
+        throw new Error(data.message || "Invalid verification code");
+      }
+
+      if (error.response?.status === 404) {
+        throw new Error("User not found");
+      }
+
+      throw new Error(error.message || "Verification failed");
+    }
   },
 
   /**

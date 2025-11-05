@@ -29,6 +29,9 @@ export const users = pgTable("Users", {
   role: roleEnum("role").default("driver").notNull(),
   isActive: boolean("isActive").default(true),
   rfidTag: varchar("rfidTag", { length: 255 }).unique(),
+  isEmailVerified: boolean("isEmailVerified").default(false).notNull(),
+  verificationCode: varchar("verificationCode", { length: 6 }),
+  verificationCodeExpiry: timestamp("verificationCodeExpiry"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
