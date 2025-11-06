@@ -31,3 +31,10 @@ name = "tagsakay-api-development"
 [env.staging]
 name = "tagsakay-api-staging"
 # Staging environment configuration
+
+[observability]
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true

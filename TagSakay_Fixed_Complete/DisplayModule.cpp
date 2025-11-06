@@ -72,23 +72,27 @@ void updateConnectionStatus(const String& wifi, const String& time, const String
   tft.print("Time: ");
   tft.println(time.substring(0, 12));
   
+  // Display full MAC address (12 chars) - fits on 320px screen with text size 1
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setCursor(180, STATUS_SECTION_Y + 40);
-  tft.print("Device: ");
-  tft.println(device.substring(0, 8));
+  tft.setCursor(LEFT_MARGIN, STATUS_SECTION_Y + 64);
+  tft.print("MAC: ");
+  tft.println(device.substring(0, 12));
   
+  // Registration mode indicator on the right side
   if (registrationMode) {
     tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
-    tft.setCursor(180, STATUS_SECTION_Y + 52);
+    tft.setCursor(180, STATUS_SECTION_Y + 64);
     tft.println("REG MODE");
   } else {
-    tft.fillRect(180, STATUS_SECTION_Y + 52, 60, 10, TFT_BLACK);
+    tft.fillRect(180, STATUS_SECTION_Y + 64, 60, 10, TFT_BLACK);
   }
 }
 
 void updateScanSection(const String& tagId, const String& status, const String& userInfo, uint16_t color) {
+  // Always clear the scan section area first
   tft.fillRect(LEFT_MARGIN, SCAN_SECTION_Y + 15, SCREEN_WIDTH - 10, SCAN_SECTION_HEIGHT - 20, TFT_BLACK);
   
+  // Only draw content if tagId is provided
   if (tagId.length() > 0) {
     tft.setTextSize(1);
     tft.setTextColor(TFT_CYAN, TFT_BLACK);
@@ -192,7 +196,11 @@ void indicateRegistrationMode() {
 }
 
 void indicateReady() {
+  clearScreen();
+  drawHeader();
+  drawSectionBorders();
   updateStatusSection("SYSTEM READY", TFT_GREEN);
+  updateScanSection("", "", "", TFT_WHITE);  // Clear scan section properly
   updateFooter("System ready - waiting for cards");
   Serial.println("✓ System ready");
 }

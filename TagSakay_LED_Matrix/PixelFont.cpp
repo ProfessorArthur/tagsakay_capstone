@@ -21,9 +21,9 @@ void drawPixelDigit(int x, int y, int digit, uint16_t color) {
     byte pattern = DIGIT_PATTERNS[digit][row];
     for (int col = 0; col < 3; col++) {
       if (pattern & (1 << (2 - col))) {
-        dma_display->drawPixel(x + col, y + row, color);
+        virtualDisp->drawPixel(x + col, y + row, color);
       } else {
-        dma_display->drawPixel(x + col, y + row, COLOR_BLACK);
+        virtualDisp->drawPixel(x + col, y + row, COLOR_BLACK);
       }
     }
   }
@@ -34,7 +34,7 @@ void drawPixelNumber(int x, int y, int number, uint16_t color) {
     // Clear tens place
     for (int row = 0; row < 5; row++) {
       for (int col = 0; col < 3; col++) {
-        dma_display->drawPixel(x + col, y + row, COLOR_BLACK);
+        virtualDisp->drawPixel(x + col, y + row, COLOR_BLACK);
       }
     }
     // Draw ones place right-aligned
@@ -55,7 +55,7 @@ void drawLargePixelNumber(int x, int y, int number, uint16_t color) {
       byte pattern = DIGIT_PATTERNS[number][row];
       for (int col = 0; col < 3; col++) {
         if (pattern & (1 << (2 - col))) {
-          dma_display->fillRect(
+          virtualDisp->fillRect(
             x + col * scale + 6 * scale,
             y + row * scale,
             scale, scale, color
@@ -71,7 +71,7 @@ void drawLargePixelNumber(int x, int y, int number, uint16_t color) {
       byte pattern = DIGIT_PATTERNS[tens][row];
       for (int col = 0; col < 3; col++) {
         if (pattern & (1 << (2 - col))) {
-          dma_display->fillRect(x + col * scale, y + row * scale, scale, scale, color);
+          virtualDisp->fillRect(x + col * scale, y + row * scale, scale, scale, color);
         }
       }
     }
@@ -80,7 +80,7 @@ void drawLargePixelNumber(int x, int y, int number, uint16_t color) {
       byte pattern = DIGIT_PATTERNS[ones][row];
       for (int col = 0; col < 3; col++) {
         if (pattern & (1 << (2 - col))) {
-          dma_display->fillRect(x + col * scale + 4 * scale, y + row * scale, scale, scale, color);
+          virtualDisp->fillRect(x + col * scale + 4 * scale, y + row * scale, scale, scale, color);
         }
       }
     }
@@ -89,6 +89,6 @@ void drawLargePixelNumber(int x, int y, int number, uint16_t color) {
 
 void drawPixelPipe(int x, int y, uint16_t color) {
   for (int i = 0; i < 5; i++) {
-    dma_display->drawPixel(x, y + i, color);
+    virtualDisp->drawPixel(x, y + i, color);
   }
 }

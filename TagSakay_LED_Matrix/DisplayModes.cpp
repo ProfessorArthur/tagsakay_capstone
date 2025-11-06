@@ -9,13 +9,13 @@ void displayIdleScreen() {
   currentDisplay.duration = 0;
   currentDisplay.scrolling = false;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   drawBorder(COLOR_BLUE);
   
-  dma_display->setTextSize(1);
-  dma_display->setTextColor(COLOR_CYAN);
+  virtualDisp->setTextSize(1);
+  virtualDisp->setTextColor(COLOR_CYAN);
   drawCenteredText("TagSakay", 10, COLOR_CYAN, 1);
-  drawCenteredText("RFID System", 25, COLOR_WHITE, 1);
+  drawCenteredText("LED Matrix", 25, COLOR_WHITE, 1);
   
   if (location.length() > 0) {
     drawCenteredText(location, 40, COLOR_GREEN, 1);
@@ -23,7 +23,7 @@ void displayIdleScreen() {
   
   drawCenteredText("Ready", 55, COLOR_READY, 1);
   
-  dma_display->flipDMABuffer();
+  dma_display->flipDMABuffer();  // Initial display flip
   Serial.println("Display: Idle screen");
 }
 
@@ -36,7 +36,7 @@ void displayQueueNumber(int queueNumber, String name) {
   currentDisplay.scrolling = (name.length() > 10);
   currentDisplay.scrollPosition = PANEL_RES_X;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   animateTransition();
   drawBorder(COLOR_GREEN);
   
@@ -49,7 +49,7 @@ void displayQueueNumber(int queueNumber, String name) {
     drawCenteredText(name, 50, COLOR_WHITE, 1);
   }
   
-  dma_display->flipDMABuffer();
+  dma_display->flipDMABuffer();  // Initial display flip
   Serial.println("Display: Queue #" + String(queueNumber) + " - " + name);
 }
 
@@ -60,7 +60,7 @@ void displayCascade(int* queueNumbers, int numQueues) {
   currentDisplay.startTime = millis();
   currentDisplay.duration = 0;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   
   int queueIndex = 0;
   int yPos = START_Y;
@@ -89,8 +89,7 @@ void displayCascade(int* queueNumbers, int numQueues) {
     rowCount++;
   }
   
-  dma_display->flipDMABuffer();
-  delay(1000 / 60);
+  dma_display->flipDMABuffer();  // Initial display flip
   
   Serial.print("Display: Cascade - ");
   Serial.print(numQueues);
@@ -105,11 +104,11 @@ void displayStatus(String status, uint16_t color) {
   currentDisplay.duration = MESSAGE_DURATION;
   currentDisplay.scrolling = false;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   drawBorder(color);
   drawCenteredText(status, 28, color, 1);
   
-  dma_display->flipDMABuffer();
+  dma_display->flipDMABuffer();  // Initial display flip
   Serial.println("Display: Status - " + status);
 }
 
@@ -122,7 +121,7 @@ void displayMessage(String message, uint16_t color) {
   currentDisplay.scrolling = (message.length() > 10);
   currentDisplay.scrollPosition = PANEL_RES_X;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   drawBorder(color);
   
   if (currentDisplay.scrolling) {
@@ -131,7 +130,7 @@ void displayMessage(String message, uint16_t color) {
     drawCenteredText(message, 28, color, 1);
   }
   
-  dma_display->flipDMABuffer();
+  dma_display->flipDMABuffer();  // Initial display flip
   Serial.println("Display: Message - " + message);
 }
 
@@ -144,7 +143,7 @@ void displayScanResult(String name, String eventType) {
   currentDisplay.scrolling = (name.length() > 10);
   currentDisplay.scrollPosition = PANEL_RES_X;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   animateSuccess();
   drawBorder(COLOR_SUCCESS);
   
@@ -155,8 +154,8 @@ void displayScanResult(String name, String eventType) {
   
   drawCenteredText(eventType, 8, eventColor, 1);
   
-  dma_display->fillRect(28, 20, 8, 3, COLOR_GREEN);
-  dma_display->fillRect(32, 23, 3, 8, COLOR_GREEN);
+  virtualDisp->fillRect(28, 20, 8, 3, COLOR_GREEN);
+  virtualDisp->fillRect(32, 23, 3, 8, COLOR_GREEN);
   
   if (currentDisplay.scrolling) {
     drawScrollingText(name, 40, COLOR_WHITE);
@@ -164,7 +163,7 @@ void displayScanResult(String name, String eventType) {
     drawCenteredText(name, 40, COLOR_WHITE, 1);
   }
   
-  dma_display->flipDMABuffer();
+  dma_display->flipDMABuffer();  // Initial display flip
   Serial.println("Display: Scan - " + name + " | " + eventType);
 }
 
@@ -176,13 +175,13 @@ void displayError(String errorType, String message) {
   currentDisplay.duration = MESSAGE_DURATION;
   currentDisplay.scrolling = false;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   drawBorder(COLOR_ERROR);
   
-  dma_display->drawLine(26, 10, 38, 22, COLOR_ERROR);
-  dma_display->drawLine(38, 10, 26, 22, COLOR_ERROR);
-  dma_display->drawLine(27, 10, 39, 22, COLOR_ERROR);
-  dma_display->drawLine(39, 10, 27, 22, COLOR_ERROR);
+  virtualDisp->drawLine(26, 10, 38, 22, COLOR_ERROR);
+  virtualDisp->drawLine(38, 10, 26, 22, COLOR_ERROR);
+  virtualDisp->drawLine(27, 10, 39, 22, COLOR_ERROR);
+  virtualDisp->drawLine(39, 10, 27, 22, COLOR_ERROR);
   
   drawCenteredText(errorType, 30, COLOR_ERROR, 1);
   
@@ -190,7 +189,7 @@ void displayError(String errorType, String message) {
     drawCenteredText(message.substring(0, 10), 45, COLOR_YELLOW, 1);
   }
   
-  dma_display->flipDMABuffer();
+  dma_display->flipDMABuffer();  // Initial display flip
   Serial.println("Display: Error - " + errorType + " | " + message);
 }
 
@@ -199,7 +198,7 @@ void displayTestPattern() {
   currentDisplay.startTime = millis();
   currentDisplay.duration = 5000;
   
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   
   drawPixelNumber(5, 5, 12, COLOR_WHITE);
   drawPixelNumber(20, 5, 34, COLOR_AMBER);
@@ -210,22 +209,23 @@ void displayTestPattern() {
   
   drawCenteredText("TEST PATTERN", 58, COLOR_WHITE, 1);
   
-  dma_display->flipDMABuffer();
+  dma_display->flipDMABuffer();  // Initial display flip
   Serial.println("Display: Test pattern");
 }
 
 void displayWelcomeScreen() {
-  dma_display->fillScreen(COLOR_BLACK);
+  virtualDisp->fillScreen(COLOR_BLACK);
   drawBorder(COLOR_CYAN);
   
-  dma_display->setTextSize(2);
-  dma_display->setTextColor(COLOR_CYAN);
+  virtualDisp->setTextSize(2);
+  virtualDisp->setTextColor(COLOR_CYAN);
   drawCenteredText("TagSakay", 15, COLOR_CYAN, 2);
   
-  dma_display->setTextSize(1);
+  virtualDisp->setTextSize(1);
   drawCenteredText("RFID System", 35, COLOR_WHITE, 1);
   drawCenteredText("Initializing...", 50, COLOR_GREEN, 1);
   
+  // Animate progress bar (intentional multiple flips for animation effect)
   for (int i = 0; i <= 100; i += 10) {
     drawProgressBar(i, 58, COLOR_GREEN);
     dma_display->flipDMABuffer();

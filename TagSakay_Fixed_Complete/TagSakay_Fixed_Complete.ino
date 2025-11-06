@@ -128,8 +128,7 @@ void setup(void) {
     Serial.println("[SYSTEM] Press 'A' on keypad for menu\n");
     
     systemReady = true;
-    indicateReady();
-    updateScanSection("", "", "", TFT_WHITE);
+    indicateReady();  // Now clears scan section internally
     sendToLEDMatrix("STATUS", "READY", "");
   }
 }
@@ -169,7 +168,8 @@ bool initializeSystem() {
   Serial.print("[NETWORK] Device ID (MAC): ");
   Serial.println(deviceId);
   
-  String deviceDisplay = deviceId.length() >= 4 ? deviceId.substring(deviceId.length() - 4) : deviceId;
+  // Pass the full MAC address for display
+  String deviceDisplay = deviceId;
   
   if (!networkModule.initialize(wifiConfig.ssid, wifiConfig.password)) {
     handleSystemError("NETWORK", "WiFi connection failed");
@@ -769,8 +769,8 @@ void handleConfigUpdate(JsonDocument& doc) {
 void handleWSConnectionStatus(bool connected) {
   if (connected) {
     Serial.println("🔌 WebSocket connected - real-time mode active");
-    updateStatusSection("WS: Connected", TFT_GREEN);
-    updateFooter("Real-time mode active");
+    // Don't overwrite the main status - just update footer
+    updateFooter("WebSocket: Connected");
     
     // Mark system as online
     offlineMode = false;
@@ -778,8 +778,8 @@ void handleWSConnectionStatus(bool connected) {
     
   } else {
     Serial.println("🔌 WebSocket disconnected - falling back to HTTP");
-    updateStatusSection("WS: Disconnected", TFT_ORANGE);
-    updateFooter("Using HTTP fallback");
+    // Don't overwrite the main status - just update footer
+    updateFooter("WebSocket: Using HTTP fallback");
     
     // Don't mark as offline if API is still available
     if (!apiModule.isInitialized()) {

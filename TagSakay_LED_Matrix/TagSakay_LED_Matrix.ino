@@ -71,10 +71,7 @@ void loop() {
   // Process incoming UART commands
   processUARTCommand();
   
-  // Handle display updates based on mode
-  updateDisplay();
-  
-  // Handle scrolling text
+  // Handle scrolling text and update display only when position changes
   if (currentDisplay.scrolling && (currentMillis - lastUpdate > SCROLL_SPEED)) {
     lastUpdate = currentMillis;
     currentDisplay.scrollPosition--;
@@ -83,6 +80,9 @@ void loop() {
     if (currentDisplay.scrollPosition < -textWidth) {
       currentDisplay.scrollPosition = PANEL_RES_X;
     }
+    
+    // Update display after scroll position changes (with buffer flip)
+    updateDisplay();
   }
   
   // Handle animation updates
