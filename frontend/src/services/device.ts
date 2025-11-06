@@ -152,7 +152,7 @@ const deviceService = {
   getAllDevices: async (): Promise<Device[]> => {
     try {
       const response = await api.get("/devices");
-      return response.data || [];
+      return response.data?.devices || [];
     } catch (error: any) {
       console.error("Failed to fetch all devices:", error);
       return [];
