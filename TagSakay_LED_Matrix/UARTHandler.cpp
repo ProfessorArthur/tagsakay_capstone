@@ -131,10 +131,10 @@ void handleCommand(String cmd, String data1, String data2) {
     displayTestPattern();
     
   } else if (cmd == "BEEP") {
-    dma_display->fillRect(0, 0, 4, 4, COLOR_YELLOW);
+    virtualDisp->fillRect(0, 0, 4, 4, COLOR_YELLOW);
     dma_display->flipDMABuffer();
     delay(50);
-    dma_display->fillRect(0, 0, 4, 4, COLOR_BLACK);
+    virtualDisp->fillRect(0, 0, 4, 4, COLOR_BLACK);
     dma_display->flipDMABuffer();
     
   } else if (cmd == "REFRESH") {

@@ -1,6 +1,7 @@
 #include "NetworkModule.h"
 #include "DisplayModule.h"
 #include "UARTModule.h"
+#include "esp_mac.h"
 
 // NetworkModule Class Implementation
 NetworkModule::NetworkModule() 
@@ -132,7 +133,22 @@ bool connectToWiFi() {
 }
 
 String getDeviceMacAddress() {
-  String mac = WiFi.macAddress();
+  uint8_t base_mac_addr[6];
+  esp_err_t ret = esp_efuse_mac_get_default(base_mac_addr);
+  if (ret != ESP_OK) {
+    Serial.println("[ERROR] Failed to get base MAC address from EFUSE");
+    // Fallback to WiFi MAC
+    String mac = WiFi.macAddress();
+    mac.replace(":", "");
+    return mac;
+  }
+  
+  char mac_str[18] = {0};
+  sprintf(mac_str, "%02X:%02X:%02X:%02X:%02X:%02X",
+          base_mac_addr[0], base_mac_addr[1], base_mac_addr[2],
+          base_mac_addr[3], base_mac_addr[4], base_mac_addr[5]);
+          
+  String mac = String(mac_str);
   mac.replace(":", "");  // Remove colons to match backend format
   return mac;
 }
