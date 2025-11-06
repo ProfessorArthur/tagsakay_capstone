@@ -46,3 +46,10 @@ Date of Fix: 2025-11-07
 Details: Not a bug—correct behavior. HTTP 409 indicates device with that MAC address already exists in database (duplicate prevention). Users attempting to re-register existing devices should either use a different MAC address, delete the existing device first, or use the existing device. Verified production database contains three registered devices (001122334455, AABBCCDDEEFF, 80F3DA4C46A4) from seed data and prior registrations.
 
 ---
+
+Date: 2025-11-07
+Error Encountered: Frontend device deletion returned 404 "Route not found" despite correct API URL (`DELETE /api/devices/:deviceId`).
+Date of Fix: 2025-11-07
+Details: DELETE route handler was incorrectly nested inside the PUT handler in `backend-workers/src/routes/device.ts`, preventing Hono from registering it at startup. Moved `app.delete("/:deviceId", ...)` block to module level (after PUT handler) so the route is properly registered. DELETE now responds with 200 success or 404 if device doesn't exist.
+
+---

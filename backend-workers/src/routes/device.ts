@@ -289,56 +289,6 @@ app.put(
         );
       }
 
-      // DELETE /api/devices/:deviceId - Remove a device (admin/superadmin only)
-      app.delete(
-        "/:deviceId",
-        authMiddleware,
-        requireRole("admin", "superadmin"),
-        async (c) => {
-          try {
-            const db = c.get("db");
-            const deviceId = c.req.param("deviceId");
-
-            const result = await db
-              .delete(devices)
-              .where(eq(devices.deviceId, deviceId))
-              .returning({
-                id: devices.id,
-                deviceId: devices.deviceId,
-                name: devices.name,
-              });
-
-            if (result.length === 0) {
-              return c.json(
-                {
-                  success: false,
-                  message: "Device not found",
-                },
-                404
-              );
-            }
-
-            return c.json({
-              success: true,
-              message: "Device removed successfully",
-              data: {
-                device: result[0],
-              },
-            });
-          } catch (error: any) {
-            console.error("Delete device error:", error);
-            return c.json(
-              {
-                success: false,
-                message: "Failed to remove device",
-                error: error.message,
-              },
-              500
-            );
-          }
-        }
-      );
-
       // Build update object
       const updateData: any = {
         updatedAt: new Date(),
@@ -374,6 +324,56 @@ app.put(
         {
           success: false,
           message: "Failed to update device",
+          error: error.message,
+        },
+        500
+      );
+    }
+  }
+);
+
+// DELETE /api/devices/:deviceId - Remove a device (admin/superadmin only)
+app.delete(
+  "/:deviceId",
+  authMiddleware,
+  requireRole("admin", "superadmin"),
+  async (c) => {
+    try {
+      const db = c.get("db");
+      const deviceId = c.req.param("deviceId");
+
+      const result = await db
+        .delete(devices)
+        .where(eq(devices.deviceId, deviceId))
+        .returning({
+          id: devices.id,
+          deviceId: devices.deviceId,
+          name: devices.name,
+        });
+
+      if (result.length === 0) {
+        return c.json(
+          {
+            success: false,
+            message: "Device not found",
+          },
+          404
+        );
+      }
+
+      return c.json({
+        success: true,
+        message: "Device removed successfully",
+        data: {
+          device: result[0],
+        },
+      });
+    } catch (error: any) {
+      console.error("Delete device error:", error);
+      return c.json(
+        {
+          success: false,
+          message: "Failed to remove device",
           error: error.message,
         },
         500
