@@ -3,9 +3,66 @@
 
 TFT_eSPI tft = TFT_eSPI();
 
+// Keypad menu layout helpers
+extern bool keypadMenuActive;
+extern bool keypadMenuVisible;
+
+namespace {
+  const int MENU_PANEL_WIDTH = 150;
+  const int MENU_PANEL_X = SCREEN_WIDTH - MENU_PANEL_WIDTH;
+  const int MENU_PANEL_PADDING = 10;
+  const int MENU_PANEL_TOP = STATUS_SECTION_Y + 12;
+  const int MENU_PANEL_HEIGHT = FOOTER_Y - MENU_PANEL_TOP - 12;
+
+  int getContentWidth() {
+    if (keypadMenuVisible) {
+      int adjustedWidth = MENU_PANEL_X - LEFT_MARGIN - 6;
+      if (adjustedWidth > 0) {
+        return adjustedWidth;
+      }
+    }
+    return SCREEN_WIDTH - (LEFT_MARGIN * 2);
+  }
+
+  void clearMenuPanelArea() {
+    int panelX = MENU_PANEL_X - 6;
+    if (panelX < 0) {
+      panelX = 0;
+    }
+    int panelWidth = SCREEN_WIDTH - panelX;
+    if (panelWidth <= 0) {
+      return;
+    }
+
+    tft.fillRect(panelX, STATUS_SECTION_Y + 5, panelWidth,
+                 FOOTER_Y - STATUS_SECTION_Y - 8, TFT_BLACK);
+  }
+
+  void drawMenuPanelFrame() {
+    int frameX = MENU_PANEL_X - 4;
+    if (frameX < 0) {
+      frameX = 0;
+    }
+    int frameHeight = FOOTER_Y - STATUS_SECTION_Y - 8;
+    tft.drawFastVLine(frameX, STATUS_SECTION_Y + 5, frameHeight, TFT_DARKGREY);
+
+    int rectX = MENU_PANEL_X - 2;
+    if (rectX < 0) {
+      rectX = 0;
+    }
+    int rectWidth = MENU_PANEL_WIDTH + 2;
+    if (rectX + rectWidth > SCREEN_WIDTH) {
+      rectWidth = SCREEN_WIDTH - rectX;
+    }
+    if (rectWidth > 0) {
+      tft.drawRect(rectX, MENU_PANEL_TOP - 6, rectWidth, MENU_PANEL_HEIGHT + 12, TFT_LIGHTGREY);
+    }
+  }
+}
+
 void initializeTFT() {
   tft.init();
-  tft.setRotation(1);  // Landscape orientation (320x240)
+  tft.setRotation(1);  // Landscape orientation for 480x320 ILI9488
   clearScreen();
   drawHeader();
   drawSectionBorders();
@@ -23,12 +80,12 @@ void drawHeader() {
   
   tft.setTextSize(2);
   tft.setTextColor(TFT_YELLOW, TFT_NAVY);
-  tft.setCursor(LEFT_MARGIN, 8);
+  tft.setCursor(LEFT_MARGIN, 12);
   tft.println("TagSakay RFID Scanner");
   
   tft.setTextSize(1);
   tft.setTextColor(TFT_LIGHTGREY, TFT_NAVY);
-  tft.setCursor(250, 20);
+  tft.setCursor(SCREEN_WIDTH - 130, 24);
   tft.println("v2.0");
 }
 
@@ -49,30 +106,30 @@ void drawSectionBorders() {
 }
 
 void updateStatusSection(const String& msg, uint16_t color) {
-  tft.fillRect(LEFT_MARGIN, STATUS_SECTION_Y + 15, SCREEN_WIDTH - 10, 20, TFT_BLACK);
+  tft.fillRect(LEFT_MARGIN, STATUS_SECTION_Y + 15, getContentWidth(), 20, TFT_BLACK);
   
   tft.setTextSize(2);
   tft.setTextColor(color, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, STATUS_SECTION_Y + 15);
-  tft.println(msg.substring(0, 20));
+  tft.println(msg.substring(0, 24));
 }
 
 void updateConnectionStatus(const String& wifi, const String& time, const String& device) {
-  tft.fillRect(LEFT_MARGIN, STATUS_SECTION_Y + 40, SCREEN_WIDTH - 10, 25, TFT_BLACK);
+  tft.fillRect(LEFT_MARGIN, STATUS_SECTION_Y + 40, getContentWidth(), 25, TFT_BLACK);
   
   tft.setTextSize(1);
   
   tft.setTextColor((wifi == "Connected") ? TFT_GREEN : TFT_RED, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, STATUS_SECTION_Y + 40);
   tft.print("WiFi: ");
-  tft.println(wifi.substring(0, 12));
+  tft.println(wifi.substring(0, 16));
   
   tft.setTextColor((time == "Synced") ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, STATUS_SECTION_Y + 52);
   tft.print("Time: ");
-  tft.println(time.substring(0, 12));
+  tft.println(time.substring(0, 16));
   
-  // Display full MAC address (12 chars) - fits on 320px screen with text size 1
+  // Display full MAC address (12 chars)
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, STATUS_SECTION_Y + 64);
   tft.print("MAC: ");
@@ -81,16 +138,24 @@ void updateConnectionStatus(const String& wifi, const String& time, const String
   // Registration mode indicator on the right side
   if (registrationMode) {
     tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
-    tft.setCursor(180, STATUS_SECTION_Y + 64);
+    int regX = keypadMenuVisible ? MENU_PANEL_X - 95 : SCREEN_WIDTH - 95;
+    if (regX < LEFT_MARGIN) {
+      regX = LEFT_MARGIN;
+    }
+    tft.setCursor(regX, STATUS_SECTION_Y + 64);
     tft.println("REG MODE");
   } else {
-    tft.fillRect(180, STATUS_SECTION_Y + 64, 60, 10, TFT_BLACK);
+    int clearX = keypadMenuVisible ? MENU_PANEL_X - 95 : SCREEN_WIDTH - 95;
+    if (clearX < LEFT_MARGIN) {
+      clearX = LEFT_MARGIN;
+    }
+    tft.fillRect(clearX, STATUS_SECTION_Y + 64, 80, 10, TFT_BLACK);
   }
 }
 
 void updateScanSection(const String& tagId, const String& status, const String& userInfo, uint16_t color) {
   // Always clear the scan section area first
-  tft.fillRect(LEFT_MARGIN, SCAN_SECTION_Y + 15, SCREEN_WIDTH - 10, SCAN_SECTION_HEIGHT - 20, TFT_BLACK);
+  tft.fillRect(LEFT_MARGIN, SCAN_SECTION_Y + 15, getContentWidth(), SCAN_SECTION_HEIGHT - 20, TFT_BLACK);
   
   // Only draw content if tagId is provided
   if (tagId.length() > 0) {
@@ -98,18 +163,18 @@ void updateScanSection(const String& tagId, const String& status, const String& 
     tft.setTextColor(TFT_CYAN, TFT_BLACK);
     tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 15);
     tft.print("Tag: ");
-    tft.println(tagId.substring(0, 16));
+    tft.println(tagId.substring(0, 20));
     
     tft.setTextSize(2);
     tft.setTextColor(color, TFT_BLACK);
     tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 30);
-    tft.println(status.substring(0, 15));
+    tft.println(status.substring(0, 20));
     
     if (userInfo.length() > 0) {
       tft.setTextSize(1);
       tft.setTextColor(TFT_WHITE, TFT_BLACK);
       tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 55);
-      tft.println(userInfo.substring(0, 30));
+      tft.println(userInfo.substring(0, 36));
     }
     
     String timestamp = getCurrentTimestamp();
@@ -133,12 +198,16 @@ void updateFooter(const String& msg) {
   tft.setTextSize(1);
   tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, FOOTER_Y + 5);
-  tft.println(msg.substring(0, 35));
+  tft.println(msg.substring(0, 45));
   
   String timestamp = getCurrentTimestamp();
   if (timestamp.length() > 0) {
     String timeStr = timestamp.substring(11, 19);
-    tft.setCursor(250, FOOTER_Y + 5);
+    int timestampX = keypadMenuVisible ? MENU_PANEL_X - 120 : SCREEN_WIDTH - 120;
+    if (timestampX < LEFT_MARGIN) {
+      timestampX = LEFT_MARGIN;
+    }
+    tft.setCursor(timestampX, FOOTER_Y + 5);
     tft.println(timeStr);
   }
   
@@ -150,18 +219,26 @@ void updateFooter(const String& msg) {
 
 void showHeartbeat(bool active) {
   uint16_t color = active ? TFT_GREEN : TFT_DARKGREY;
-  tft.fillCircle(295, FOOTER_Y + 12, 3, color);
+  int indicatorX = keypadMenuVisible ? MENU_PANEL_X - 30 : SCREEN_WIDTH - 30;
+  if (indicatorX < LEFT_MARGIN + 20) {
+    indicatorX = LEFT_MARGIN + 20;
+  }
+  tft.fillCircle(indicatorX, FOOTER_Y + 12, 4, color);
   
   tft.setTextSize(1);
   tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  tft.setCursor(270, FOOTER_Y + 18);
+  tft.setCursor(indicatorX - 25, FOOTER_Y + 18);
   tft.println("HB");
 }
 
 void showStatus(const String& msg, uint16_t color, int x, int y, int textSize) {
   tft.setTextColor(color, TFT_BLACK);
   tft.setTextSize(textSize);
-  tft.fillRect(x, y, 460, 20, TFT_BLACK);
+  int clearWidth = SCREEN_WIDTH - x - LEFT_MARGIN;
+  if (clearWidth < 0) {
+    clearWidth = SCREEN_WIDTH;
+  }
+  tft.fillRect(x, y, clearWidth, 20, TFT_BLACK);
   tft.setCursor(x, y);
   tft.println(msg);
 }
@@ -196,12 +273,19 @@ void indicateRegistrationMode() {
 }
 
 void indicateReady() {
+  bool wasMenuVisible = keypadMenuVisible;
+  bool wasMenuActive = keypadMenuActive;
   clearScreen();
   drawHeader();
   drawSectionBorders();
   updateStatusSection("SYSTEM READY", TFT_GREEN);
   updateScanSection("", "", "", TFT_WHITE);  // Clear scan section properly
   updateFooter("System ready - waiting for cards");
+  keypadMenuVisible = wasMenuVisible;
+  keypadMenuActive = wasMenuActive;
+  if (wasMenuVisible) {
+    showKeypadMenu(false);
+  }
   Serial.println("✓ System ready");
 }
 
@@ -224,7 +308,7 @@ void blinkError(int times) {
 }
 
 void displayKeypadPrompt(const String& prompt, const String& buffer) {
-  tft.fillRect(LEFT_MARGIN, SCAN_SECTION_Y + 15, SCREEN_WIDTH - 10, SCAN_SECTION_HEIGHT - 20, TFT_BLACK);
+  tft.fillRect(LEFT_MARGIN, SCAN_SECTION_Y + 15, getContentWidth(), SCAN_SECTION_HEIGHT - 20, TFT_BLACK);
   
   tft.setTextSize(2);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -244,32 +328,77 @@ void displayKeypadPrompt(const String& prompt, const String& buffer) {
   updateFooter("Enter number and press #");
 }
 
-void showKeypadMenu() {
-  updateStatusSection("KEYPAD MENU", TFT_CYAN);
-  
-  tft.fillRect(LEFT_MARGIN, SCAN_SECTION_Y + 15, SCREEN_WIDTH - 10, SCAN_SECTION_HEIGHT - 20, TFT_BLACK);
-  
+void showKeypadMenu(bool refreshFooter) {
+  keypadMenuVisible = true;
+  clearMenuPanelArea();
+  drawMenuPanelFrame();
+
+  int innerX = MENU_PANEL_X + 2;
+  int innerWidth = MENU_PANEL_WIDTH - 12;
+  if (innerWidth < 0) {
+    innerWidth = MENU_PANEL_WIDTH - 4;
+  }
+  tft.fillRect(innerX, MENU_PANEL_TOP - 2, innerWidth, MENU_PANEL_HEIGHT + 4, TFT_BLACK);
+
   tft.setTextSize(1);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 15);
-  tft.println("1: Queue Override");
-  tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 30);
-  tft.println("2: Clear Display");
-  tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 45);
-  tft.println("3: Test Display");
-  tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 60);
-  tft.println("4: Device Status");
-  tft.setCursor(LEFT_MARGIN, SCAN_SECTION_Y + 75);
-  tft.println("#: Exit Menu");
-  
-  updateFooter("Select menu option");
-  
+  tft.setTextColor(keypadMenuActive ? TFT_CYAN : TFT_LIGHTGREY, TFT_BLACK);
+  tft.setCursor(MENU_PANEL_X + MENU_PANEL_PADDING, MENU_PANEL_TOP + 2);
+  tft.println("Keypad Menu");
+
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  tft.setCursor(MENU_PANEL_X + MENU_PANEL_PADDING, MENU_PANEL_TOP + 16);
+  if (keypadMenuActive) {
+    tft.println("Select 1-4 or #");
+  } else {
+    tft.println("Press A to select");
+  }
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  int cursorY = MENU_PANEL_TOP + 32;
+  tft.setCursor(MENU_PANEL_X + MENU_PANEL_PADDING, cursorY);
+  tft.println("1: Send heartbeat");
+
+  cursorY += 14;
+  tft.setCursor(MENU_PANEL_X + MENU_PANEL_PADDING, cursorY);
+  tft.println("2: Enable reg mode");
+
+  cursorY += 14;
+  tft.setCursor(MENU_PANEL_X + MENU_PANEL_PADDING, cursorY);
+  tft.println("3: Disable reg mode");
+
+  cursorY += 14;
+  tft.setCursor(MENU_PANEL_X + MENU_PANEL_PADDING, cursorY);
+  tft.println("4: Sync device");
+
+  cursorY += 18;
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  tft.setCursor(MENU_PANEL_X + MENU_PANEL_PADDING, cursorY);
+  tft.println("#: Close menu");
+
+  if (refreshFooter) {
+    if (keypadMenuActive) {
+      updateFooter("Select menu option");
+    } else {
+      updateFooter("Press A then choose an option");
+    }
+  }
+
   Serial.println("=== KEYPAD MENU ===");
-  Serial.println("1: Queue Override");
-  Serial.println("2: Clear Display");
-  Serial.println("3: Test Display");
-  Serial.println("4: Device Status");
-  Serial.println("#: Exit Menu");
+  if (!keypadMenuActive) {
+    Serial.println("Press 'A' to activate menu selections");
+  }
+  Serial.println("1: Send heartbeat");
+  Serial.println("2: Enable registration mode");
+  Serial.println("3: Disable registration mode");
+  Serial.println("4: Sync device profile");
+  Serial.println("#: Exit menu");
+}
+
+void hideKeypadMenu() {
+  keypadMenuVisible = false;
+  keypadMenuActive = false;
+  clearMenuPanelArea();
+  drawSectionBorders();
 }
 
 // Test mode display functions
@@ -342,9 +471,10 @@ void showRFIDScan(const String& tagId, int count) {
 
 void drawHeartbeat() {
   // Draw heartbeat indicator
-  tft.fillCircle(310, 5, 3, TFT_GREEN);
+  int hbX = SCREEN_WIDTH - 16;
+  tft.fillCircle(hbX, 8, 4, TFT_GREEN);
   delay(100);
-  tft.fillCircle(310, 5, 3, TFT_BLACK);
+  tft.fillCircle(hbX, 8, 4, TFT_BLACK);
 }
 
 void showColumnTest(int col, const char* expectedKeys) {

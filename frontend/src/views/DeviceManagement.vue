@@ -142,7 +142,7 @@
               <tbody class="bg-white divide-y divide-gray-200">
                 <tr
                   v-for="device in devices"
-                  :key="device.id"
+                  :key="device.deviceId"
                   class="hover:bg-gray-50"
                 >
                   <td class="px-6 py-4 whitespace-nowrap text-gray-900">
@@ -396,14 +396,14 @@ export default defineComponent({
         loading.value = true;
         error.value = null;
 
-        await deviceService.deleteDevice(deviceToDelete.value.id);
+        await deviceService.deleteDevice(deviceToDelete.value.deviceId);
 
         // Show success message
         success.value = `Device "${deviceToDelete.value.name}" has been deleted successfully`;
 
         // Remove from local array
         devices.value = devices.value.filter(
-          (d) => d.id !== deviceToDelete.value?.id
+          (d) => d.deviceId !== deviceToDelete.value?.deviceId
         );
 
         // Close modal
@@ -430,12 +430,14 @@ export default defineComponent({
 
         // Toggle the status
         const newStatus = !device.isActive;
-        await deviceService.updateDeviceStatus(device.id, {
+        await deviceService.updateDeviceStatus(device.deviceId, {
           isActive: newStatus,
         });
 
         // Update local state
-        const updatedDevice = devices.value.find((d) => d.id === device.id);
+        const updatedDevice = devices.value.find(
+          (d) => d.deviceId === device.deviceId
+        );
         if (updatedDevice) {
           updatedDevice.isActive = newStatus;
         }

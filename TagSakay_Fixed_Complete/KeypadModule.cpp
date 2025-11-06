@@ -21,6 +21,7 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, KEYPAD_ROWS, KEYPAD_C
 String keypadBuffer = "";
 bool keypadActive = false;
 bool keypadMenuActive = false;
+bool keypadMenuVisible = false;
 unsigned long keypadLastInput = 0;
 
 void initializeKeypad() {
@@ -41,6 +42,8 @@ void handleKeypadInput() {
     } else if (key == 'A') {
       // 'A' key opens menu
       keypadMenuActive = true;
+      keypadMenuVisible = true;
+      updateStatusSection("KEYPAD MENU", TFT_CYAN);
       showKeypadMenu();
     } else {
       processKeypadKey(key);
@@ -78,45 +81,54 @@ void processKeypadKey(char key) {
 void handleKeypadMenuSelection(char key) {
   switch (key) {
     case '1':
-      Serial.println("Menu: Queue Override selected");
-      keypadMenuActive = false;
-      keypadActive = true;
-      keypadBuffer = "";
-      displayKeypadPrompt("Enter Queue #:", keypadBuffer);
+      Serial.println("Menu: Send heartbeat");
+      sendHeartbeat();
+      showKeypadMenu(false);
       break;
 
     case '2':
-      Serial.println("Menu: Clear Display selected");
-      keypadMenuActive = false;
-      sendToLEDMatrix("CLEAR", "", "");
-      indicateReady();
-      updateFooter("Display cleared via keypad");
+      Serial.println("Menu: Enable registration mode");
+      if (updateDeviceMode(true, false)) {
+        indicateRegistrationMode();
+        updateScanSection("", "Waiting for tag", expectedRegistrationTagId, TFT_MAGENTA);
+        sendToLEDMatrix("REG", "WAITING", expectedRegistrationTagId.substring(0, 8));
+      } else {
+        updateStatusSection("REG MODE FAIL", TFT_RED);
+        updateFooter("Unable to enable registration mode");
+      }
+      showKeypadMenu(false);
       break;
 
     case '3':
-      Serial.println("Menu: Test Display selected");
-      keypadMenuActive = false;
-      sendToLEDMatrix("TEST", "", "");
-      updateStatusSection("DISPLAY TEST", TFT_CYAN);
-      updateFooter("Testing LED matrix display");
-      delay(2000);
-      indicateReady();
+      Serial.println("Menu: Disable registration mode");
+      if (updateDeviceMode(false, true)) {
+        updateStatusSection("REG MODE OFF", TFT_GREEN);
+        updateScanSection("", "", "", TFT_WHITE);
+        updateFooter("Registration mode disabled");
+        sendToLEDMatrix("REG", "OFF", "");
+      } else {
+        updateStatusSection("REG MODE FAIL", TFT_RED);
+        updateFooter("Unable to disable registration mode");
+      }
+      showKeypadMenu(false);
       break;
 
     case '4':
-      Serial.println("Menu: Device Status selected");
-      keypadMenuActive = false;
-      reportDeviceStatus("manual_status_check");
-      updateStatusSection("STATUS SENT", TFT_GREEN);
-      updateFooter("Device status reported");
-      delay(1000);
-      indicateReady();
+      Serial.println("Menu: Sync device profile");
+      if (syncDeviceProfile()) {
+        updateScanSection("", "", "", TFT_WHITE);
+      } else {
+        updateStatusSection("SYNC FAILED", TFT_RED);
+        updateFooter("Unable to sync device profile");
+      }
+      showKeypadMenu(false);
       break;
 
     case '#':
       Serial.println("Menu: Exit");
       keypadMenuActive = false;
-      indicateReady();
+      showKeypadMenu(true);
+      Serial.println("Menu closed. Press 'A' to reactivate selections.");
       break;
 
     default:

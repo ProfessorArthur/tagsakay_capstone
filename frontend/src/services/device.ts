@@ -9,15 +9,22 @@ export interface Device {
   location: string;
   isActive: boolean;
   registrationMode: boolean;
+  scanMode: boolean;
+  pendingRegistrationTagId?: string;
   lastSeen?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface RegisterDeviceRequest {
   macAddress: string;
   name: string;
   location: string;
+}
+
+export interface RegisterDeviceResponse {
+  device: Device;
+  apiKey: string;
 }
 
 export interface UpdateDeviceStatusRequest {
@@ -97,7 +104,7 @@ const deviceService = {
    */
   registerDevice: async (
     deviceData: RegisterDeviceRequest
-  ): Promise<Device> => {
+  ): Promise<RegisterDeviceResponse> => {
     // Client-side validation
     const macValidation = validateMacAddress(deviceData.macAddress);
     if (!macValidation.valid) {
@@ -116,7 +123,7 @@ const deviceService = {
 
     try {
       const response = await api.post("/devices/register", deviceData);
-      return response.data;
+      return response.data as RegisterDeviceResponse;
     } catch (error: any) {
       if (error.response?.status === 400) {
         const apiResponse = error.response.data as ApiResponse;
@@ -139,7 +146,7 @@ const deviceService = {
   getActiveDevices: async (): Promise<Device[]> => {
     try {
       const response = await api.get("/devices/active");
-      return response.data || [];
+      return response.data?.devices || [];
     } catch (error: any) {
       console.error("Failed to fetch active devices:", error);
       return [];
@@ -163,12 +170,16 @@ const deviceService = {
    * Update device status (enable/disable)
    */
   updateDeviceStatus: async (
-    id: number,
+    deviceId: string,
     statusData: UpdateDeviceStatusRequest
-  ): Promise<Device> => {
+  ): Promise<Partial<Device>> => {
     try {
-      const response = await api.put(`/devices/${id}/status`, statusData);
-      return response.data;
+      const response = await api.put(`/devices/${deviceId}`, statusData);
+      const device = response.data?.device as Partial<Device> | undefined;
+      if (!device) {
+        throw new Error("Device payload missing from update response");
+      }
+      return device;
     } catch (error: any) {
       throw new Error(error.message || "Failed to update device status");
     }
@@ -177,9 +188,9 @@ const deviceService = {
   /**
    * Delete a device
    */
-  deleteDevice: async (id: number): Promise<void> => {
+  deleteDevice: async (deviceId: string): Promise<void> => {
     try {
-      await api.delete(`/devices/${id}`);
+      await api.delete(`/devices/${deviceId}`);
     } catch (error: any) {
       throw new Error(error.message || "Failed to delete device");
     }
@@ -191,14 +202,18 @@ const deviceService = {
   enableRegistrationMode: async (
     deviceId: string,
     tagId?: string
-  ): Promise<Device> => {
+  ): Promise<Partial<Device>> => {
     try {
-      const response = await api.post(`/devices/status/${deviceId}`, {
+      const response = await api.post(`/devices/${deviceId}/mode`, {
         registrationMode: true,
         pendingRegistrationTagId: tagId || "",
         scanMode: !tagId,
       });
-      return response.data;
+      const device = response.data?.device as Partial<Device> | undefined;
+      if (!device) {
+        throw new Error("Device payload missing from enable response");
+      }
+      return device;
     } catch (error: any) {
       throw new Error(error.message || "Failed to enable registration mode");
     }
@@ -207,13 +222,19 @@ const deviceService = {
   /**
    * Disable registration mode for a device
    */
-  disableRegistrationMode: async (deviceId: string): Promise<Device> => {
+  disableRegistrationMode: async (
+    deviceId: string
+  ): Promise<Partial<Device>> => {
     try {
-      const response = await api.post(`/devices/status/${deviceId}`, {
+      const response = await api.post(`/devices/${deviceId}/mode`, {
         registrationMode: false,
         pendingRegistrationTagId: "",
       });
-      return response.data;
+      const device = response.data?.device as Partial<Device> | undefined;
+      if (!device) {
+        throw new Error("Device payload missing from disable response");
+      }
+      return device;
     } catch (error: any) {
       throw new Error(error.message || "Failed to disable registration mode");
     }
@@ -230,14 +251,18 @@ const deviceService = {
     deviceId: string;
     enabled: boolean;
     tagId?: string;
-  }): Promise<Device> => {
+  }): Promise<Partial<Device>> => {
     try {
-      const response = await api.post(`/devices/status/${deviceId}`, {
+      const response = await api.post(`/devices/${deviceId}/mode`, {
         registrationMode: enabled,
         pendingRegistrationTagId: tagId || "",
         scanMode: !tagId && enabled,
       });
-      return response.data;
+      const device = response.data?.device as Partial<Device> | undefined;
+      if (!device) {
+        throw new Error("Device payload missing from mode response");
+      }
+      return device;
     } catch (error: any) {
       throw new Error(error.message || "Failed to set registration mode");
     }

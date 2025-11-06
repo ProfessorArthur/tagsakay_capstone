@@ -624,7 +624,6 @@ Register new ESP32 device.
 
 ```json
 {
-  "deviceId": "ESP32-001",
   "macAddress": "AA:BB:CC:DD:EE:FF",
   "location": "Gate 1",
   "name": "Main Entrance Scanner"
@@ -638,14 +637,15 @@ Register new ESP32 device.
   "success": true,
   "message": "Device registered successfully",
   "data": {
-    "id": "device-001",
-    "deviceId": "ESP32-001",
-    "macAddress": "AA:BB:CC:DD:EE:FF",
-    "location": "Gate 1",
-    "name": "Main Entrance Scanner",
-    "status": "offline",
-    "apiKey": "sk_device_abc123xyz...",
-    "createdAt": "2025-01-20T16:20:00Z"
+    "device": {
+      "id": 42,
+      "deviceId": "AABBCCDDEEFF",
+      "macAddress": "AA:BB:CC:DD:EE:FF",
+      "name": "Main Entrance Scanner",
+      "location": "Gate 1",
+      "isActive": true
+    },
+    "apiKey": "sk_device_abc123xyz..."
   }
 }
 ```
@@ -665,18 +665,54 @@ List all registered devices (Admin only).
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": "device-001",
-      "deviceId": "ESP32-001",
-      "macAddress": "AA:BB:CC:DD:EE:FF",
-      "location": "Gate 1",
-      "name": "Main Entrance Scanner",
-      "status": "online",
-      "lastHeartbeat": "2025-01-20T16:25:00Z",
-      "createdAt": "2025-01-20T16:20:00Z"
-    }
-  ]
+  "message": "Retrieved 4 devices",
+  "data": {
+    "devices": [
+      {
+        "id": 42,
+        "deviceId": "AABBCCDDEEFF",
+        "macAddress": "AA:BB:CC:DD:EE:FF",
+        "name": "Main Entrance Scanner",
+        "location": "Gate 1",
+        "isActive": true,
+        "registrationMode": false,
+        "scanMode": false,
+        "lastSeen": "2025-01-20T16:25:00Z",
+        "createdAt": "2025-01-20T16:20:00Z"
+      }
+    ],
+    "total": 4
+  }
+}
+```
+
+---
+
+#### **GET /api/devices/active**
+
+List only active devices.
+
+**Authorization:** Bearer token, role: admin or superadmin
+
+**Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "message": "Retrieved 2 active devices",
+  "data": {
+    "devices": [
+      {
+        "deviceId": "AABBCCDDEEFF",
+        "name": "Main Entrance Scanner",
+        "isActive": true,
+        "registrationMode": false,
+        "scanMode": false,
+        "lastSeen": "2025-01-20T16:25:00Z"
+      }
+    ],
+    "total": 2
+  }
 }
 ```
 
@@ -694,14 +730,16 @@ Get device details.
 {
   "success": true,
   "data": {
-    "id": "device-001",
-    "deviceId": "ESP32-001",
+    "id": 42,
+    "deviceId": "AABBCCDDEEFF",
     "macAddress": "AA:BB:CC:DD:EE:FF",
-    "location": "Gate 1",
     "name": "Main Entrance Scanner",
-    "status": "online",
-    "lastHeartbeat": "2025-01-20T16:25:00Z",
+    "location": "Gate 1",
+    "isActive": true,
     "registrationMode": false,
+    "scanMode": false,
+    "pendingRegistrationTagId": "",
+    "lastSeen": "2025-01-20T16:25:00Z",
     "createdAt": "2025-01-20T16:20:00Z",
     "updatedAt": "2025-01-20T16:25:00Z"
   }
@@ -722,7 +760,7 @@ Update device settings (Admin only).
 {
   "location": "Gate 2",
   "name": "Back Door Scanner",
-  "status": "online"
+  "isActive": true
 }
 ```
 
@@ -733,12 +771,37 @@ Update device settings (Admin only).
   "success": true,
   "message": "Device updated successfully",
   "data": {
-    "id": "device-001",
-    "deviceId": "ESP32-001",
-    "location": "Gate 2",
-    "name": "Back Door Scanner",
-    "status": "online",
-    "updatedAt": "2025-01-20T16:30:00Z"
+    "device": {
+      "id": 42,
+      "deviceId": "AABBCCDDEEFF",
+      "location": "Gate 2",
+      "name": "Back Door Scanner",
+      "isActive": true
+    }
+  }
+}
+```
+
+---
+
+#### **DELETE /api/devices/:deviceId**
+
+Remove a device (Admin only).
+
+**Authorization:** Bearer token, role: admin or superadmin
+
+**Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "message": "Device removed successfully",
+  "data": {
+    "device": {
+      "id": 42,
+      "deviceId": "AABBCCDDEEFF",
+      "name": "Main Entrance Scanner"
+    }
   }
 }
 ```
@@ -778,9 +841,9 @@ Device heartbeat ping (Device auth only).
 
 ---
 
-#### **POST /api/devices/:deviceId/register-mode**
+#### **POST /api/devices/:deviceId/mode**
 
-Enable/disable RFID registration mode on device.
+Enable or disable registration/scan modes.
 
 **Authorization:** Bearer token, role: admin or superadmin
 
@@ -788,8 +851,9 @@ Enable/disable RFID registration mode on device.
 
 ```json
 {
-  "enabled": true,
-  "durationMinutes": 15
+  "registrationMode": true,
+  "scanMode": false,
+  "pendingRegistrationTagId": "ABC123"
 }
 ```
 
@@ -798,11 +862,14 @@ Enable/disable RFID registration mode on device.
 ```json
 {
   "success": true,
-  "message": "Registration mode updated",
+  "message": "Device mode updated successfully",
   "data": {
-    "registrationMode": true,
-    "duration": 15,
-    "expiresAt": "2025-01-20T16:50:00Z"
+    "device": {
+      "deviceId": "AABBCCDDEEFF",
+      "registrationMode": true,
+      "scanMode": false,
+      "pendingRegistrationTagId": "ABC123"
+    }
   }
 }
 ```

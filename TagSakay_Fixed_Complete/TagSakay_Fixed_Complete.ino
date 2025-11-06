@@ -129,6 +129,7 @@ void setup(void) {
     
     systemReady = true;
     indicateReady();  // Now clears scan section internally
+    showKeypadMenu(false);
     sendToLEDMatrix("STATUS", "READY", "");
   }
 }

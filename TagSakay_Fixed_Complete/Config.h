@@ -43,20 +43,20 @@
 // Display Layout Constants
 // =======================
 
-#define SCREEN_WIDTH 320
-#define SCREEN_HEIGHT 240
+#define SCREEN_WIDTH 480
+#define SCREEN_HEIGHT 320
 
-#define HEADER_HEIGHT 35
-#define STATUS_SECTION_Y 40
-#define STATUS_SECTION_HEIGHT 70
-#define SCAN_SECTION_Y 115
-#define SCAN_SECTION_HEIGHT 80
-#define FOOTER_Y 200
-#define FOOTER_HEIGHT 40
+#define HEADER_HEIGHT 48
+#define STATUS_SECTION_Y 56
+#define STATUS_SECTION_HEIGHT 104
+#define SCAN_SECTION_Y 170
+#define SCAN_SECTION_HEIGHT 120
+#define FOOTER_Y 290
+#define FOOTER_HEIGHT 30
 
-#define LEFT_MARGIN 5
-#define RIGHT_MARGIN 315
-#define CENTER_X 160
+#define LEFT_MARGIN 12
+#define RIGHT_MARGIN (SCREEN_WIDTH - 12)
+#define CENTER_X (SCREEN_WIDTH / 2)
 
 // =======================
 // Timing Constants

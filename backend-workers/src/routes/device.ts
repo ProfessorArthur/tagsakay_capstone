@@ -158,6 +158,54 @@ app.get("/", authMiddleware, requireRole("admin", "superadmin"), async (c) => {
   }
 });
 
+// GET /api/devices/active - List active devices
+app.get(
+  "/active",
+  authMiddleware,
+  requireRole("admin", "superadmin"),
+  async (c) => {
+    try {
+      const db = c.get("db");
+
+      const activeDevices = await db
+        .select({
+          id: devices.id,
+          deviceId: devices.deviceId,
+          macAddress: devices.macAddress,
+          name: devices.name,
+          location: devices.location,
+          isActive: devices.isActive,
+          registrationMode: devices.registrationMode,
+          scanMode: devices.scanMode,
+          lastSeen: devices.lastSeen,
+          createdAt: devices.createdAt,
+        })
+        .from(devices)
+        .where(eq(devices.isActive, true))
+        .orderBy(desc(devices.lastSeen));
+
+      return c.json({
+        success: true,
+        message: `Retrieved ${activeDevices.length} active devices`,
+        data: {
+          devices: activeDevices,
+          total: activeDevices.length,
+        },
+      });
+    } catch (error: any) {
+      console.error("List active devices error:", error);
+      return c.json(
+        {
+          success: false,
+          message: "Failed to retrieve active devices",
+          error: error.message,
+        },
+        500
+      );
+    }
+  }
+);
+
 // GET /api/devices/:deviceId - Get specific device
 app.get("/:deviceId", authMiddleware, async (c) => {
   try {
@@ -240,6 +288,56 @@ app.put(
           404
         );
       }
+
+      // DELETE /api/devices/:deviceId - Remove a device (admin/superadmin only)
+      app.delete(
+        "/:deviceId",
+        authMiddleware,
+        requireRole("admin", "superadmin"),
+        async (c) => {
+          try {
+            const db = c.get("db");
+            const deviceId = c.req.param("deviceId");
+
+            const result = await db
+              .delete(devices)
+              .where(eq(devices.deviceId, deviceId))
+              .returning({
+                id: devices.id,
+                deviceId: devices.deviceId,
+                name: devices.name,
+              });
+
+            if (result.length === 0) {
+              return c.json(
+                {
+                  success: false,
+                  message: "Device not found",
+                },
+                404
+              );
+            }
+
+            return c.json({
+              success: true,
+              message: "Device removed successfully",
+              data: {
+                device: result[0],
+              },
+            });
+          } catch (error: any) {
+            console.error("Delete device error:", error);
+            return c.json(
+              {
+                success: false,
+                message: "Failed to remove device",
+                error: error.message,
+              },
+              500
+            );
+          }
+        }
+      );
 
       // Build update object
       const updateData: any = {

@@ -7,6 +7,7 @@ import deviceService from "../services/device";
 import type {
   Device,
   RegisterDeviceRequest,
+  RegisterDeviceResponse,
   UpdateDeviceStatusRequest,
 } from "../services/device";
 
@@ -14,8 +15,8 @@ export function useDeviceService() {
   // Individual API states for different operations
   const deviceListState = useApiState<Device[]>([]);
   const activeDevicesState = useApiState<Device[]>([]);
-  const registerDeviceState = useApiState<Device>();
-  const updateDeviceState = useApiState<Device>();
+  const registerDeviceState = useApiState<RegisterDeviceResponse>();
+  const updateDeviceState = useApiState<Partial<Device>>();
   const deleteDeviceState = useApiState<void>();
 
   /**
@@ -88,11 +89,11 @@ export function useDeviceService() {
    * Update device status
    */
   const updateDeviceStatus = async (
-    id: number,
+    deviceId: string,
     statusData: UpdateDeviceStatusRequest
   ) => {
     const result = await updateDeviceState.execute(
-      () => deviceService.updateDeviceStatus(id, statusData),
+      () => deviceService.updateDeviceStatus(deviceId, statusData),
       { maxRetries: 1 }
     );
 
@@ -107,9 +108,9 @@ export function useDeviceService() {
   /**
    * Delete device
    */
-  const deleteDevice = async (id: number) => {
+  const deleteDevice = async (deviceId: string) => {
     const result = await deleteDeviceState.execute(
-      () => deviceService.deleteDevice(id),
+      () => deviceService.deleteDevice(deviceId),
       { maxRetries: 1 }
     );
 
@@ -260,4 +261,9 @@ export function useDeviceService() {
   };
 }
 
-export type { Device, RegisterDeviceRequest, UpdateDeviceStatusRequest };
+export type {
+  Device,
+  RegisterDeviceRequest,
+  RegisterDeviceResponse,
+  UpdateDeviceStatusRequest,
+};

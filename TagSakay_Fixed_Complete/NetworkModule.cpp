@@ -366,7 +366,7 @@ void handleScanResponse(const String& responseData) {
   }
 }
 
-void sendHeartbeat() {
+bool sendHeartbeat() {
   Serial.println("Sending heartbeat...");
 
   String endpoint = "/api/devices/" + deviceId + "/heartbeat";
@@ -383,15 +383,22 @@ void sendHeartbeat() {
   showHeartbeat(true);
 
   ApiResponse response = makeApiRequest(endpoint, payload, "POST");
+  bool success = (response.result == API_SUCCESS);
 
-  if (response.result == API_SUCCESS) {
+  if (success) {
     Serial.println("Heartbeat sent successfully");
+    updateStatusSection("HEARTBEAT SENT", TFT_GREEN);
+    updateFooter("Heartbeat acknowledged by server");
   } else {
     Serial.println("Heartbeat failed");
+    updateStatusSection("HEARTBEAT FAIL", TFT_RED);
+    String errorMsg = response.error.length() > 0 ? response.error : "Network error";
+    updateFooter("Heartbeat failed: " + errorMsg);
   }
 
   delay(100);
   showHeartbeat(false);
+  return success;
 }
 
 void reportDeviceStatus(String reason) {
@@ -456,4 +463,80 @@ void checkRegistrationModeFromServer() {
       }
     }
   }
+}
+
+bool updateDeviceMode(bool registrationModeEnabled, bool scanModeEnabled, const String& pendingTagId) {
+  String endpoint = "/api/devices/" + deviceId + "/mode";
+
+  StaticJsonDocument<256> doc;
+  doc["registrationMode"] = registrationModeEnabled;
+  doc["scanMode"] = scanModeEnabled;
+  if (pendingTagId.length() > 0) {
+    doc["pendingRegistrationTagId"] = pendingTagId;
+  }
+
+  String payload;
+  serializeJson(doc, payload);
+
+  ApiResponse response = makeApiRequest(endpoint, payload, "POST");
+  if (response.result != API_SUCCESS) {
+    Serial.println("Failed to update device mode via API");
+    return false;
+  }
+
+  StaticJsonDocument<512> resDoc;
+  DeserializationError error = deserializeJson(resDoc, response.data);
+  if (!error) {
+    JsonObject device = resDoc["data"]["device"];
+    if (!device.isNull()) {
+      registrationMode = device["registrationMode"] | registrationModeEnabled;
+      deviceConfig.scanMode = device["scanMode"] | scanModeEnabled;
+      expectedRegistrationTagId = device["pendingRegistrationTagId"] | expectedRegistrationTagId;
+    }
+  }
+
+  if (registrationModeEnabled) {
+    registrationModeStartTime = millis();
+  } else {
+    registrationModeStartTime = 0;
+  }
+
+  return true;
+}
+
+bool syncDeviceProfile() {
+  String endpoint = "/api/devices/" + deviceId;
+
+  ApiResponse response = makeApiRequest(endpoint, "", "GET");
+  if (response.result != API_SUCCESS) {
+    Serial.println("Failed to sync device profile from API");
+    return false;
+  }
+
+  StaticJsonDocument<1024> doc;
+  DeserializationError error = deserializeJson(doc, response.data);
+  if (error) {
+    Serial.print("JSON parsing error during profile sync: ");
+    Serial.println(error.c_str());
+    return false;
+  }
+
+  JsonObject device = doc["data"]["device"];
+  if (device.isNull()) {
+    Serial.println("Device payload missing during profile sync");
+    return false;
+  }
+
+  deviceConfig.name = String(device["name"] | deviceConfig.name.c_str());
+  deviceConfig.location = String(device["location"] | deviceConfig.location.c_str());
+  deviceConfig.registrationMode = device["registrationMode"] | deviceConfig.registrationMode;
+  deviceConfig.scanMode = device["scanMode"] | deviceConfig.scanMode;
+
+  registrationMode = deviceConfig.registrationMode;
+  expectedRegistrationTagId = String(device["pendingRegistrationTagId"] | expectedRegistrationTagId.c_str());
+
+  updateStatusSection("PROFILE SYNCED", TFT_GREEN);
+  updateFooter("Device profile refreshed from server");
+
+  return true;
 }

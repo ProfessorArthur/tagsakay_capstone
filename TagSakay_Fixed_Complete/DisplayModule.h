@@ -36,7 +36,8 @@ void blinkError(int times);
 
 // Keypad display
 void displayKeypadPrompt(const String& prompt, const String& buffer);
-void showKeypadMenu();
+void showKeypadMenu(bool refreshFooter = true);
+void hideKeypadMenu();
 
 // Test mode displays
 void showMenu(const char* title, const char* items);
