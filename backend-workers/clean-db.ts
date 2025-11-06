@@ -22,6 +22,15 @@ const truncateAllTables = async () => {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   try {
+    // Drop custom enum types first (to allow clean migration replay)
+    console.log("🗑️  Dropping custom enum types...");
+    await pool.query(`DROP TYPE IF EXISTS event_type CASCADE`);
+    console.log("✓ Dropped: event_type");
+    await pool.query(`DROP TYPE IF EXISTS role CASCADE`);
+    console.log("✓ Dropped: role");
+    await pool.query(`DROP TYPE IF EXISTS scan_status CASCADE`);
+    console.log("✓ Dropped: scan_status");
+
     // Get all table names from information_schema
     const result = await pool.query(`
       SELECT table_name 
@@ -33,16 +42,15 @@ const truncateAllTables = async () => {
     const tables = result.rows.map((row: any) => row.table_name);
 
     if (tables.length === 0) {
-      console.log("⚠️  No tables found to truncate");
-      return;
-    }
+      console.log("⚠️  No tables found to drop");
+    } else {
+      console.log(`📋 Found ${tables.length} tables: ${tables.join(", ")}`);
 
-    console.log(`📋 Found ${tables.length} tables: ${tables.join(", ")}`);
-
-    // Truncate each table (Neon doesn't allow session_replication_role)
-    for (const table of tables) {
-      await pool.query(`TRUNCATE TABLE "${table}" RESTART IDENTITY CASCADE`);
-      console.log(`✓ Truncated: ${table}`);
+      // Drop each table completely (CASCADE handles foreign keys)
+      for (const table of tables) {
+        await pool.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
+        console.log(`✓ Dropped: ${table}`);
+      }
     }
 
     console.log("✅ Database cleanup complete!");

@@ -29,43 +29,40 @@ export async function deviceAuthMiddleware(c: Context, next: Next) {
   try {
     const db = c.get("db");
     const { devices, apiKeys } = await import("../db/schema");
-    const { eq, or } = await import("drizzle-orm");
-    const { hashApiKey } = await import("../lib/auth");
+    const { eq } = await import("drizzle-orm");
+    const { verifyApiKey } = await import("../lib/auth");
 
-    const hashedKey = await hashApiKey(apiKey);
-
-    // Check in devices table
-    const [device] = await db
+    const activeDevices = await db
       .select()
       .from(devices)
-      .where(eq(devices.apiKey, hashedKey))
-      .limit(1);
+      .where(eq(devices.isActive, true));
 
-    if (device && device.isActive) {
-      c.set("device", device);
-      await next();
-      return;
+    for (const device of activeDevices) {
+      if (await verifyApiKey(apiKey, device.apiKey)) {
+        c.set("device", device);
+        await next();
+        return;
+      }
     }
 
-    // Check in apiKeys table
-    const [apiKeyRecord] = await db
+    const activeApiKeys = await db
       .select()
       .from(apiKeys)
-      .where(eq(apiKeys.key, hashedKey))
-      .limit(1);
+      .where(eq(apiKeys.isActive, true));
 
-    if (apiKeyRecord && apiKeyRecord.isActive) {
-      c.set("apiKey", apiKeyRecord);
-      c.set("device", { id: apiKeyRecord.deviceId });
+    for (const apiKeyRecord of activeApiKeys) {
+      if (await verifyApiKey(apiKey, apiKeyRecord.key)) {
+        c.set("apiKey", apiKeyRecord);
+        c.set("device", { id: apiKeyRecord.deviceId });
 
-      // Update last used
-      await db
-        .update(apiKeys)
-        .set({ lastUsed: new Date() })
-        .where(eq(apiKeys.id, apiKeyRecord.id));
+        await db
+          .update(apiKeys)
+          .set({ lastUsed: new Date() })
+          .where(eq(apiKeys.id, apiKeyRecord.id));
 
-      await next();
-      return;
+        await next();
+        return;
+      }
     }
 
     return c.json({ success: false, message: "Invalid API key" }, 401);

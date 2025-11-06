@@ -4,8 +4,8 @@
 #include "UARTModule.h"
 
 // Keypad pin configuration
-byte rowPins[KEYPAD_ROWS] = {32, 33, 25, 26};  // Rows 1-4
-byte colPins[KEYPAD_COLS] = {4, 2, 15, 5};     // Cols 1-4
+byte rowPins[KEYPAD_ROWS] = {25, 26, 32, 33};  // Rows 1-4 (matches working test sketch)
+byte colPins[KEYPAD_COLS] = {5, 19, 21, 22};   // Cols 1-4 (keeps clear of TFT SPI pins)
 
 // Keypad layout
 char keys[KEYPAD_ROWS][KEYPAD_COLS] = {
