@@ -75,54 +75,56 @@
 // API Configuration
 // =======================
 
-// PRODUCTION Configuration (WebSocket + HTTP Fallback)
-// Uses custom domain api.tagsakay.com (live as of Nov 5, 2025)
-// Falls back to: tagsakay-api-production.maskedmyles.workers.dev if DNS issues
+// ⚠️  CHOOSE ONE: Comment/Uncomment the section you need
+// LOCAL: For development with computer running "npm run dev"
+// PRODUCTION: For live deployment to api.tagsakay.com
 
-// WebSocket Configuration (Primary)
-#ifndef WS_HOST
-  // Production: Using custom domain api.tagsakay.com
-  #define WS_HOST "api.tagsakay.com"  // Custom domain (primary)
-#endif
+// ============================================================================
+// 🔧 LOCAL DEVELOPMENT CONFIGURATION (UNCOMMENT THIS FOR LOCAL DEMO)
+// ============================================================================
+// Instructions:
+// 1. Find your computer IP: Run "ipconfig" in command prompt
+// 2. Replace "192.168.1.100" below with your actual IP (e.g., 192.168.1.50)
+// 3. Make sure backend is running: cd backend-workers && npm run dev
+// 4. Uncomment all lines in this section (delete //)
+// 5. Comment out PRODUCTION section below
+//
+#define WS_HOST "192.168.1.100"              // ← CHANGE TO YOUR COMPUTER IP
+#define WS_PORT 8787                         // Cloudflare Workers dev port
+#define WS_PATH "/ws/device"                 // WebSocket endpoint
+#define USE_SECURE_WS false                  // HTTP (not HTTPS) for local
+#define API_BASE_URL "http://192.168.1.100:8787"  // ← CHANGE TO YOUR IP + PORT
+#define API_DEFAULT_KEY ""                   // No key needed for local dev
+//
+// ============================================================================
 
-#ifndef WS_PORT
-  #define WS_PORT 443  // HTTPS/WSS standard port (Cloudflare)
-#endif
+// ============================================================================
+// 🚀 PRODUCTION CONFIGURATION (UNCOMMENT THIS FOR DEPLOYMENT)
+// ============================================================================
+// Instructions:
+// 1. Obtain API key from admin panel: https://tagsakay-frontend.pages.dev
+// 2. Uncomment all lines in this section (delete //)
+// 3. Comment out LOCAL section above
+// 4. Set API_DEFAULT_KEY to your actual device API key
+// 5. Flash to ESP32 for production deployment
+//
+// #define WS_HOST "api.tagsakay.com"          // Production custom domain
+// #define WS_PORT 443                         // HTTPS/WSS standard port
+// #define WS_PATH "/ws/device"                // WebSocket endpoint
+// #define USE_SECURE_WS true                  // HTTPS/WSS for production
+// #define API_BASE_URL "https://api.tagsakay.com"  // Production HTTP API
+// #define API_DEFAULT_KEY ""                  // Set your device API key here
+//
+// ============================================================================
 
-#ifndef WS_PATH
-  #define WS_PATH "/ws/device"  // WebSocket endpoint path
-#endif
-
-#define WS_RECONNECT_INTERVAL 5000   // Reconnect every 5 seconds if disconnected
-#define WS_PING_INTERVAL 30000       // Send heartbeat every 30 seconds
-#define WS_ENABLED true              // Enable WebSocket (set false to use HTTP only)
-#define USE_SECURE_WS true           // Production: Use secure HTTPS/WSS
-
-// HTTP Fallback Configuration
-// Used when WebSocket is unavailable or disabled
-#ifndef API_BASE_URL
-  #define API_BASE_URL "https://api.tagsakay.com"  // HTTP fallback URL (custom domain)
-#endif
-
-#ifndef API_DEFAULT_KEY
-  #define API_DEFAULT_KEY ""  // Set your device API key here (or configure via Serial)
-#endif
-
+// Common API configuration (both local & production)
 #define API_TIMEOUT_MS 5000
 #define API_RETRY_ATTEMPTS 3
 #define MAX_CONSECUTIVE_FAILURES 5
 
-// ===== LOCAL DEVELOPMENT Configuration (COMMENTED OUT) =====
-// For local testing, comment out production config above and uncomment:
-//
-// #define WS_HOST "192.168.1.100"  // Your computer IP running: npm run dev
-// #define WS_PORT 8787              // Local Cloudflare Workers dev port
-// #define WS_PATH "/ws/device"
-// #define USE_SECURE_WS false       // Local development uses HTTP/WS (non-secure)
-// #define API_BASE_URL "http://192.168.1.100:8787"  // Local dev HTTP URL
-//
-// To find your local IP: ipconfig (Windows) or ifconfig (Mac/Linux)
-// Then run backend: cd backend-workers && npm run dev
+#define WS_RECONNECT_INTERVAL 5000   // Reconnect every 5 seconds if disconnected
+#define WS_PING_INTERVAL 30000       // Send heartbeat every 30 seconds
+#define WS_ENABLED true              // Enable WebSocket (set false to use HTTP only)
 
 // =======================
 // Network Configuration
