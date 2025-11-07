@@ -1,22 +1,43 @@
 import { Context, Next } from "hono";
 import { verifyJWT } from "../lib/auth";
+import { getSession } from "../lib/session";
 
 export async function authMiddleware(c: Context, next: Next) {
   const authHeader = c.req.header("Authorization");
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return c.json({ success: false, message: "No token provided" }, 401);
+  if (authHeader) {
+    if (!authHeader.startsWith("Bearer ")) {
+      return c.json({ success: false, message: "No token provided" }, 401);
+    }
+
+    const token = authHeader.substring(7);
+
+    try {
+      const payload = await verifyJWT(token, c.env.JWT_SECRET);
+      c.set("user", payload);
+      await next();
+      return;
+    } catch (error) {
+      return c.json(
+        { success: false, message: "Invalid or expired token" },
+        401
+      );
+    }
   }
 
-  const token = authHeader.substring(7);
-
+  // Fallback to session cookie authentication when Authorization header is absent
   try {
-    const payload = await verifyJWT(token, c.env.JWT_SECRET);
-    c.set("user", payload);
-    await next();
+    const session = await getSession(c as any);
+    if (session) {
+      c.set("user", session);
+      await next();
+      return;
+    }
   } catch (error) {
-    return c.json({ success: false, message: "Invalid or expired token" }, 401);
+    console.warn("Session cookie verification failed", error);
   }
+
+  return c.json({ success: false, message: "No token provided" }, 401);
 }
 
 export async function deviceAuthMiddleware(c: Context, next: Next) {

@@ -5,16 +5,23 @@ import { users, rfids } from "../db/schema";
 import { hashPassword } from "../lib/auth";
 import type { Database } from "../db";
 
-type Variables = {
-  db: Database;
-  user: {
-    id: number;
-    email: string;
-    role: "admin" | "superadmin" | "driver";
+type Env = {
+  Bindings: {
+    DATABASE_URL: string;
+    JWT_SECRET: string;
+    SESSION_SECRET: string;
+  };
+  Variables: {
+    db: Database;
+    user: {
+      id: number;
+      email: string;
+      role: "admin" | "superadmin" | "driver";
+    };
   };
 };
 
-const app = new Hono<{ Variables: Variables }>();
+const app = new Hono<Env>();
 
 /**
  * GET /api/users

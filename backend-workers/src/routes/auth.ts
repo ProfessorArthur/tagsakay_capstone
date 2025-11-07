@@ -6,6 +6,11 @@ import {
   verifyJWT,
   validatePasswordStrength,
 } from "../lib/auth";
+import {
+  clearSession,
+  createSession,
+  refreshSession,
+} from "../lib/session";
 import { sendVerificationEmail } from "../lib/email";
 import { users } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -33,6 +38,7 @@ type Env = {
   Bindings: {
     DATABASE_URL: string;
     JWT_SECRET: string;
+    SESSION_SECRET: string;
     RESEND_API_KEY: string;
   };
   Variables: {
@@ -210,6 +216,17 @@ app.post("/login", authRateLimit, async (c) => {
 
     // Log successful login
     logLoginSuccess(normalizedEmail, ipAddress, userAgent);
+
+    try {
+      await createSession(c, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+    } catch (sessionError) {
+      console.error("Failed to create session cookie", sessionError);
+    }
 
     return c.json({
       success: true,
@@ -551,6 +568,17 @@ app.post("/verify-email", authRateLimit, async (c) => {
       message: `Email verified: ${normalizedEmail}`,
     });
 
+    try {
+      await createSession(c, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+    } catch (sessionError) {
+      console.error("Failed to create session cookie", sessionError);
+    }
+
     return c.json({
       success: true,
       message: "Email verified successfully",
@@ -646,6 +674,17 @@ app.post("/refresh", async (c) => {
       c.env.JWT_SECRET
     );
 
+    try {
+      await refreshSession(c, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+    } catch (sessionError) {
+      console.error("Failed to refresh session cookie", sessionError);
+    }
+
     return c.json({
       success: true,
       message: "Token refreshed successfully",
@@ -682,6 +721,8 @@ app.post("/logout", authMiddleware, async (c) => {
 
   // Optional: Log the logout event
   console.log(`User ${user.email} (ID: ${user.id}) logged out`);
+
+  clearSession(c);
 
   // Optional: You could add token to a blacklist table here
   // For now, we'll just return success

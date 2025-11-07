@@ -13,6 +13,7 @@ type Env = {
   Bindings: {
     DATABASE_URL: string;
     JWT_SECRET: string;
+    SESSION_SECRET: string;
   };
   Variables: {
     db: Database;

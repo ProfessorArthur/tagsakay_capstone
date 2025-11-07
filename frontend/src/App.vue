@@ -10,7 +10,7 @@ const isLoggedIn = ref(authService.isLoggedIn());
 
 // Check if current route requires authentication
 const isAuthRoute = computed(() => {
-  return route.path !== "/login" && route.path !== "/register";
+  return Boolean(route.meta.requiresAuth);
 });
 
 // Listen for changes in localStorage to update isLoggedIn reactively
@@ -23,14 +23,16 @@ window.addEventListener("storage", () => {
 const checkAuthentication = () => {
   isLoggedIn.value = authService.isLoggedIn();
 
-  // If not logged in and not on login, register, or verify-email page, redirect to login
-  if (
-    !isLoggedIn.value &&
-    route.path !== "/login" &&
-    route.path !== "/register" &&
-    route.path !== "/verify-email"
-  ) {
+  const requiresAuth = Boolean(route.meta.requiresAuth);
+  const requiresGuest = Boolean(route.meta.requiresGuest);
+
+  if (!isLoggedIn.value && requiresAuth) {
     router.push("/login");
+    return;
+  }
+
+  if (isLoggedIn.value && requiresGuest) {
+    router.push("/dashboard");
   }
 };
 
