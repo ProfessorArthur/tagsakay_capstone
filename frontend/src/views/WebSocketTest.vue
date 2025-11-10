@@ -1,8 +1,36 @@
 <template>
   <div class="p-6">
+    <!-- DEPRECATION NOTICE -->
+    <div class="alert alert-warning shadow-lg mb-6">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="stroke-current shrink-0 h-6 w-6"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+        />
+      </svg>
+      <div>
+        <h3 class="font-bold">WebSocket Functionality Deprecated (Nov 2024)</h3>
+        <div class="text-sm">
+          This page is kept for reference only. TagSakay now uses
+          <strong>HTTP polling</strong> instead of WebSockets due to Cloudflare
+          Workers free tier limitations. Devices poll
+          <code>GET /api/devices/:deviceId/commands</code>
+          every 5 seconds for server instructions. For testing, use the Device
+          Registration page or API endpoints directly.
+        </div>
+      </div>
+    </div>
+
     <div class="mb-8">
       <h1 class="text-3xl font-bold text-base-content mb-2">
-        WebSocket Testing
+        WebSocket Testing (DEPRECATED)
       </h1>
       <p class="text-base-content/70">Test real-time RFID scan functionality</p>
     </div>
@@ -166,6 +194,24 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * DEPRECATION NOTICE (November 2024)
+ * ===================================
+ * This component is kept for reference only. WebSocket functionality has been disabled
+ * due to Cloudflare Workers free tier limitations (requires Durable Objects - paid feature).
+ *
+ * TagSakay now uses HTTP polling architecture:
+ * - Backend: GET /api/devices/:deviceId/commands (devices poll every 5s)
+ * - Device→Backend: POST /api/rfid/scan, POST /api/devices/:deviceId/heartbeat
+ * - Backend→Device: Command responses via polling endpoint
+ *
+ * For testing device integration, use:
+ * - Device Registration page (simulates HTTP polling connection)
+ * - Direct API endpoint testing with tools like Postman/curl
+ * - ESP32 diagnostics firmware (TagSakay_Fixed_Complete/Diagnostics/)
+ *
+ * This page will NOT function as WebSocket connections are disabled in composables.
+ */
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useDeviceWebSocket } from "../composables/useDeviceWebSocket";
 import { useRealTimeScans } from "../composables/useRealTimeScans";

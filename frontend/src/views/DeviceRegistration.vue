@@ -2,7 +2,8 @@
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useDeviceService } from "../composables/useDeviceService";
-import { useDeviceWebSocket } from "../composables/useDeviceWebSocket";
+// MIGRATION NOTE (Nov 2024): WebSocket functionality disabled - using HTTP polling
+// import { useDeviceWebSocket } from "../composables/useDeviceWebSocket";
 
 const router = useRouter();
 const { registerDevice, registerLoading, registerError } = useDeviceService();
@@ -14,11 +15,12 @@ const location = ref("");
 const apiKey = ref<string | null>(null);
 const registeredDevice = ref<any | null>(null);
 const showResult = ref(false);
-const wsTestConnected = ref(false);
+const wsTestConnected = ref(false); // Kept for UI compatibility (renamed to pollingTest internally)
 const copySuccess = ref(false);
 const validationErrors = ref<Record<string, string>>({});
 
-let deviceWs: ReturnType<typeof useDeviceWebSocket> | null = null;
+// DISABLED: WebSocket composable (HTTP polling mode)
+// let deviceWs: ReturnType<typeof useDeviceWebSocket> | null = null;
 
 // Enhanced validation
 const validateForm = () => {
@@ -112,6 +114,22 @@ const copyApiKey = async () => {
 
 const testConnect = () => {
   if (!registeredDevice.value) return;
+
+  // HTTP polling mode - simulate connection test
+  if (wsTestConnected.value) {
+    // Disconnect
+    wsTestConnected.value = false;
+    console.log("HTTP polling test disconnected");
+    return;
+  }
+
+  // Connect - simulate successful connection for HTTP polling mode
+  wsTestConnected.value = true;
+  console.log(
+    "HTTP polling test: Device uses HTTPClient to poll GET /api/devices/:deviceId/commands"
+  );
+
+  /* DISABLED: WebSocket connection test
   if (deviceWs) {
     deviceWs.disconnectDevice();
     deviceWs = null;
@@ -122,6 +140,7 @@ const testConnect = () => {
   deviceWs = useDeviceWebSocket({ deviceId: registeredDevice.value.deviceId });
   deviceWs.connectDevice();
   wsTestConnected.value = true;
+  */
 };
 
 const goToDeviceManagement = () => {
@@ -133,10 +152,13 @@ const registerAnother = () => {
   apiKey.value = null;
   registeredDevice.value = null;
   wsTestConnected.value = false;
+
+  /* DISABLED: WebSocket cleanup
   if (deviceWs) {
     deviceWs.disconnectDevice();
     deviceWs = null;
   }
+  */
 };
 </script>
 
@@ -612,15 +634,25 @@ const registerAnother = () => {
             <div class="mockup-code bg-base-300 shadow-inner">
               <pre
                 class="px-4"
-              ><code class="text-sm">// ESP32 Configuration Constants
+              ><code class="text-sm">// ESP32 Configuration Constants (HTTP Polling Mode)
 const char* DEVICE_ID = "{{ registeredDevice?.deviceId }}";
 const char* API_KEY = "{{ apiKey }}";
-const char* SERVER_URL = "http://localhost:8787/api";
-const char* WS_URL = "ws://localhost:8787/ws/device";</code></pre>
+const char* API_HOST = "localhost";
+const int API_PORT = 8787;
+const char* API_BASE_PATH = "/api";
+
+// Polling intervals (milliseconds)
+const unsigned long COMMAND_POLL_INTERVAL = 5000;  // Poll for commands every 5s
+const unsigned long HEARTBEAT_INTERVAL = 30000;     // Send heartbeat every 30s
+
+// Key endpoints:
+// - GET /api/devices/{DEVICE_ID}/commands (poll for registration mode)
+// - POST /api/rfid/scan (send RFID scans)
+// - POST /api/devices/{DEVICE_ID}/heartbeat (send heartbeat)</code></pre>
             </div>
           </div>
 
-          <!-- WebSocket Test -->
+          <!-- HTTP Polling Test -->
           <div
             class="bg-base-100 text-base-content rounded-xl p-6 mb-8 shadow-lg"
           >
@@ -660,8 +692,9 @@ const char* WS_URL = "ws://localhost:8787/ws/device";</code></pre>
               </div>
             </div>
             <p class="text-base-content/70 mb-4">
-              Test the WebSocket connection to verify device connectivity with
-              the TagSakay system:
+              Test the HTTP polling connection to verify device connectivity
+              with the TagSakay system (devices poll commands endpoint every 5
+              seconds):
             </p>
             <button
               class="btn btn-outline btn-lg"

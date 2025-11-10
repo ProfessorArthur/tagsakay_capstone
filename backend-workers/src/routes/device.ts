@@ -4,6 +4,7 @@ import {
   requireRole,
   deviceAuthMiddleware,
 } from "../middleware/auth";
+import { apiRateLimit } from "../middleware/rateLimit";
 import { devices } from "../db/schema";
 import { eq, desc } from "drizzle-orm";
 import type { Database } from "../db";
@@ -383,6 +384,102 @@ app.delete(
   }
 );
 
+// GET /api/devices/:deviceId/commands - Poll for pending commands (device auth + rate limit)
+app.get(
+  "/:deviceId/commands",
+  apiRateLimit,
+  deviceAuthMiddleware,
+  async (c) => {
+    try {
+      const db = c.get("db");
+      const deviceId = c.req.param("deviceId");
+      const device = c.get("device");
+
+      // Verify deviceId matches authenticated device
+      if (device && device.deviceId !== deviceId) {
+        return c.json(
+          {
+            success: false,
+            message: "Device ID mismatch",
+          },
+          403
+        );
+      }
+
+      // Get device state
+      const [deviceData] = await db
+        .select({
+          deviceId: devices.deviceId,
+          isActive: devices.isActive,
+          registrationMode: devices.registrationMode,
+          scanMode: devices.scanMode,
+          pendingRegistrationTagId: devices.pendingRegistrationTagId,
+          lastSeen: devices.lastSeen,
+        })
+        .from(devices)
+        .where(eq(devices.deviceId, deviceId))
+        .limit(1);
+
+      if (!deviceData) {
+        return c.json(
+          {
+            success: false,
+            message: "Device not found",
+          },
+          404
+        );
+      }
+
+      // Build commands response
+      const commands: any[] = [];
+
+      // Check for registration mode command
+      if (deviceData.registrationMode && deviceData.pendingRegistrationTagId) {
+        commands.push({
+          action: "enable_registration",
+          tagId: deviceData.pendingRegistrationTagId,
+          timestamp: Date.now(),
+        });
+      } else if (!deviceData.registrationMode) {
+        commands.push({
+          action: "disable_registration",
+          timestamp: Date.now(),
+        });
+      }
+
+      // Check for scan mode changes
+      commands.push({
+        action: "scan_mode",
+        enabled: deviceData.scanMode,
+        timestamp: Date.now(),
+      });
+
+      return c.json({
+        success: true,
+        message: "Commands retrieved",
+        data: {
+          commands,
+          deviceStatus: {
+            isActive: deviceData.isActive,
+            registrationMode: deviceData.registrationMode,
+            scanMode: deviceData.scanMode,
+          },
+        },
+      });
+    } catch (error: any) {
+      console.error("Get commands error:", error);
+      return c.json(
+        {
+          success: false,
+          message: "Failed to retrieve commands",
+          error: error.message,
+        },
+        500
+      );
+    }
+  }
+);
+
 // POST /api/devices/:deviceId/heartbeat - Device heartbeat (device auth)
 app.post("/:deviceId/heartbeat", deviceAuthMiddleware, async (c) => {
   try {
@@ -430,6 +527,7 @@ app.post("/:deviceId/heartbeat", deviceAuthMiddleware, async (c) => {
           isActive: updatedDevice.isActive,
           registrationMode: updatedDevice.registrationMode,
           scanMode: updatedDevice.scanMode,
+          pendingRegistrationTagId: updatedDevice.pendingRegistrationTagId,
           lastSeen: updatedDevice.lastSeen,
         },
       },

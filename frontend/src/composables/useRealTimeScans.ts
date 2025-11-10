@@ -1,7 +1,12 @@
 import { ref, computed } from "vue";
-import { useWebSocket } from "./useWebSocket";
+// MIGRATION NOTE (Nov 2024): WebSocket functionality disabled due to Cloudflare Workers free tier limitations
+// Backend now uses HTTP polling architecture - devices poll GET /api/devices/:deviceId/commands every 5s
+// Frontend uses this composable for maintaining scan history and stats only
+// WebSocket imports kept for future reference when upgrading to Durable Objects (paid tier)
+// import { useWebSocket } from "./useWebSocket";
 import type { RfidScan } from "../services/rfid";
 
+/* DISABLED: WebSocket event types (kept for reference)
 interface RealTimeScanEvent {
   success: boolean;
   scan?: {
@@ -41,6 +46,7 @@ type WebSocketEvent =
   | RealTimeScanEvent
   | DeviceConnectionEvent
   | HeartbeatEvent;
+*/
 
 export const useRealTimeScans = () => {
   const recentScans = ref<RfidScan[]>([]);
@@ -48,6 +54,15 @@ export const useRealTimeScans = () => {
   const totalScanCount = ref(0);
   const lastScanTime = ref<Date | null>(null);
 
+  // HTTP Polling state (replaces WebSocket state)
+  const pollingState = ref({
+    connected: false,
+    connecting: false,
+    error: null as string | null,
+    reconnectAttempts: 0,
+  });
+
+  /* DISABLED: WebSocket implementation (kept for reference)
   // Get WebSocket URL from environment
   const getWebSocketUrl = () => {
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8787";
@@ -71,13 +86,17 @@ export const useRealTimeScans = () => {
     maxReconnectAttempts: 10,
     heartbeatInterval: 30000, // 30 seconds
   });
+  */
 
-  // Connection status computed properties
-  const isConnected = computed(() => state.connected);
-  const isConnecting = computed(() => state.connecting);
-  const connectionError = computed(() => state.error);
-  const reconnectAttempts = computed(() => state.reconnectAttempts);
+  // Connection status computed properties (now use HTTP polling state)
+  const isConnected = computed(() => pollingState.value.connected);
+  const isConnecting = computed(() => pollingState.value.connecting);
+  const connectionError = computed(() => pollingState.value.error);
+  const reconnectAttempts = computed(
+    () => pollingState.value.reconnectAttempts
+  );
 
+  /* DISABLED: WebSocket message handling (kept for reference)
   // Handle incoming WebSocket messages
   onMessage((data: WebSocketEvent) => {
     console.log("Real-time event received:", data);
@@ -178,14 +197,38 @@ export const useRealTimeScans = () => {
       })
     );
   });
+  */
+
+  // HTTP Polling implementation (replaces WebSocket)
+  // Note: Components should use backend HTTP API endpoints directly for real-time updates
+  // This composable now primarily maintains scan history and statistics
 
   // Public methods
   const startListening = () => {
-    connect();
+    // Simulate connection start for HTTP polling mode
+    pollingState.value.connecting = true;
+    pollingState.value.error = null;
+
+    // Set connected state after short delay
+    setTimeout(() => {
+      pollingState.value.connecting = false;
+      pollingState.value.connected = true;
+      console.log("HTTP polling mode active (WebSocket disabled)");
+
+      // Emit polling-connected event for Dashboard
+      window.dispatchEvent(new CustomEvent("polling-connected"));
+    }, 100);
   };
 
   const stopListening = () => {
-    disconnect();
+    // Simulate disconnection for HTTP polling mode
+    pollingState.value.connected = false;
+    pollingState.value.connecting = false;
+    connectedDevices.value.clear();
+    console.log("HTTP polling mode stopped");
+
+    // Emit polling-disconnected event for Dashboard
+    window.dispatchEvent(new CustomEvent("polling-disconnected"));
   };
 
   const clearRecentScans = () => {

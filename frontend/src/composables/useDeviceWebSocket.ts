@@ -1,5 +1,9 @@
 import { ref, reactive, onUnmounted } from "vue";
-import { useWebSocket } from "./useWebSocket";
+// MIGRATION NOTE (Nov 2024): WebSocket functionality disabled due to Cloudflare Workers free tier limitations
+// Backend now uses HTTP polling architecture - devices poll GET /api/devices/:deviceId/commands every 5s
+// This composable kept for reference when upgrading to Durable Objects (paid tier)
+// For HTTP polling implementation, see backend-workers/src/routes/device.ts and ESP32 firmware pollCommands()
+// import { useWebSocket } from "./useWebSocket";
 
 interface DeviceWebSocketConfig {
   deviceId: string;
@@ -28,6 +32,7 @@ export const useDeviceWebSocket = (config: DeviceWebSocketConfig) => {
   const lastMessage = ref<any>(null);
   const error = ref<string | null>(null);
 
+  /* DISABLED: WebSocket implementation (kept for reference)
   // Get WebSocket URL with device ID
   const getWebSocketUrl = () => {
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8787";
@@ -123,7 +128,20 @@ export const useDeviceWebSocket = (config: DeviceWebSocketConfig) => {
     deviceState.connected = false;
     console.error(`Device ${config.deviceId} WebSocket error:`, errorMsg);
   });
+  */
 
+  // HTTP Polling state (replaces WebSocket)
+  const pollingState = ref({
+    connected: false,
+    connecting: false,
+  });
+
+  /* DISABLED: Device actions (kept for reference)
+  // Note: In HTTP polling mode, devices send actions directly to REST API endpoints
+  // - Scan: POST /api/rfid/scan
+  // - Heartbeat: POST /api/devices/:deviceId/heartbeat
+  // - Config changes: Admin updates via panel, device polls GET /api/devices/:deviceId/commands
+  
   // Device actions
   const scanRfid = (tagId: string, location?: string): boolean => {
     return send({
@@ -154,26 +172,70 @@ export const useDeviceWebSocket = (config: DeviceWebSocketConfig) => {
       scanMode: enabled,
     });
   };
+  */
+
+  // Stub implementations for HTTP polling mode
+  const scanRfid = (_tagId: string, _location?: string): boolean => {
+    console.warn(
+      "useDeviceWebSocket: WebSocket disabled. Use REST API POST /api/rfid/scan instead"
+    );
+    return false;
+  };
+
+  const sendHeartbeat = (): boolean => {
+    console.warn(
+      "useDeviceWebSocket: WebSocket disabled. Use REST API POST /api/devices/:deviceId/heartbeat instead"
+    );
+    return false;
+  };
+
+  const setRegistrationMode = (_enabled: boolean): boolean => {
+    console.warn(
+      "useDeviceWebSocket: WebSocket disabled. Use admin panel to update device registration mode"
+    );
+    return false;
+  };
+
+  const setScanMode = (_enabled: boolean): boolean => {
+    console.warn(
+      "useDeviceWebSocket: WebSocket disabled. Use admin panel to update device scan mode"
+    );
+    return false;
+  };
 
   // Connection management
   const connectDevice = () => {
-    connect();
+    console.log(
+      `HTTP polling mode: Device ${config.deviceId} connection simulated`
+    );
+    pollingState.value.connecting = true;
+
+    setTimeout(() => {
+      pollingState.value.connecting = false;
+      pollingState.value.connected = true;
+      deviceState.connected = true;
+    }, 100);
   };
 
   const disconnectDevice = () => {
-    disconnect();
+    console.log(
+      `HTTP polling mode: Device ${config.deviceId} disconnection simulated`
+    );
+    pollingState.value.connected = false;
+    pollingState.value.connecting = false;
+    deviceState.connected = false;
   };
 
   // Cleanup on component unmount
   onUnmounted(() => {
-    disconnect();
+    disconnectDevice();
   });
 
   return {
     // State
     deviceState: deviceState,
-    isConnected: state.connected,
-    isConnecting: state.connecting,
+    isConnected: pollingState.value.connected,
+    isConnecting: pollingState.value.connecting,
     connectionError: error,
     lastMessage,
 
@@ -181,7 +243,7 @@ export const useDeviceWebSocket = (config: DeviceWebSocketConfig) => {
     connectDevice,
     disconnectDevice,
 
-    // Device actions
+    // Device actions (stubbed - use REST API instead)
     scanRfid,
     sendHeartbeat,
     setRegistrationMode,

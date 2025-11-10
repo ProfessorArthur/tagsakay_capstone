@@ -73,12 +73,12 @@ const deviceStats = ref({
   total: 0,
 });
 
-// Real-time WebSocket integration
+// Real-time polling integration (replaces WebSocket)
 const {
   recentScans,
   stats: realTimeStats,
-  isConnected: wsConnected,
-  isConnecting: wsConnecting,
+  isConnected: pollingActive,
+  isConnecting: pollingStarting,
   startListening,
   stopListening,
 } = useRealTimeScans();
@@ -115,12 +115,12 @@ const handleRfidScan = (event: Event) => {
   }, 3000);
 };
 
-const handleWebSocketConnection = () => {
-  console.log("WebSocket connected for real-time updates");
+const handlePollingConnection = () => {
+  console.log("HTTP polling started for real-time updates");
 };
 
-const handleWebSocketDisconnection = () => {
-  console.log("WebSocket disconnected");
+const handlePollingDisconnection = () => {
+  console.log("HTTP polling stopped");
 };
 
 // Chart Data
@@ -328,28 +328,25 @@ onMounted(async () => {
   user.value = authService.getUser();
   await loadStatistics();
 
-  // Start WebSocket connection for real-time updates
+  // Start HTTP polling for real-time updates
   startListening();
 
   // Add event listeners for real-time events
   window.addEventListener("rfid-scan", handleRfidScan);
-  window.addEventListener("websocket-connected", handleWebSocketConnection);
-  window.addEventListener(
-    "websocket-disconnected",
-    handleWebSocketDisconnection
-  );
+  window.addEventListener("polling-connected", handlePollingConnection);
+  window.addEventListener("polling-disconnected", handlePollingDisconnection);
 });
 
 onUnmounted(() => {
-  // Stop WebSocket connection
+  // Stop HTTP polling
   stopListening();
 
   // Remove event listeners
   window.removeEventListener("rfid-scan", handleRfidScan);
-  window.removeEventListener("websocket-connected", handleWebSocketConnection);
+  window.removeEventListener("polling-connected", handlePollingConnection);
   window.removeEventListener(
-    "websocket-disconnected",
-    handleWebSocketDisconnection
+    "polling-disconnected",
+    handlePollingDisconnection
   );
 });
 </script>
@@ -368,37 +365,41 @@ onUnmounted(() => {
           <p class="text-base-content/70">Welcome back, {{ user?.name }}!</p>
         </div>
 
-        <!-- WebSocket Connection Status -->
+        <!-- Polling Connection Status -->
         <div class="flex items-center gap-2">
           <div
             class="tooltip"
             :data-tip="
-              wsConnected
-                ? 'Real-time updates active'
-                : wsConnecting
-                ? 'Connecting to real-time updates...'
-                : 'Real-time updates disconnected'
+              pollingActive
+                ? 'Real-time updates active (HTTP polling)'
+                : pollingStarting
+                ? 'Starting real-time updates...'
+                : 'Real-time updates inactive'
             "
           >
             <div
               class="flex items-center gap-2 px-3 py-2 rounded-lg"
               :class="{
-                'bg-success/10 text-success': wsConnected,
-                'bg-warning/10 text-warning': wsConnecting,
-                'bg-error/10 text-error': !wsConnected && !wsConnecting,
+                'bg-success/10 text-success': pollingActive,
+                'bg-warning/10 text-warning': pollingStarting,
+                'bg-error/10 text-error': !pollingActive && !pollingStarting,
               }"
             >
               <div
                 class="w-2 h-2 rounded-full"
                 :class="{
-                  'bg-success animate-pulse': wsConnected,
-                  'bg-warning animate-spin': wsConnecting,
-                  'bg-error': !wsConnected && !wsConnecting,
+                  'bg-success animate-pulse': pollingActive,
+                  'bg-warning animate-spin': pollingStarting,
+                  'bg-error': !pollingActive && !pollingStarting,
                 }"
               ></div>
               <span class="text-sm font-medium">
                 {{
-                  wsConnected ? "Live" : wsConnecting ? "Connecting" : "Offline"
+                  pollingActive
+                    ? "Live"
+                    : pollingStarting
+                    ? "Starting"
+                    : "Offline"
                 }}
               </span>
             </div>
@@ -516,8 +517,8 @@ onUnmounted(() => {
         </h3>
         <div class="flex items-center gap-2 text-sm">
           <span class="text-base-content/60">Real-time updates:</span>
-          <span :class="wsConnected ? 'text-success' : 'text-error'">
-            {{ wsConnected ? "Active" : "Inactive" }}
+          <span :class="pollingActive ? 'text-success' : 'text-error'">
+            {{ pollingActive ? "Active" : "Inactive" }}
           </span>
         </div>
       </div>

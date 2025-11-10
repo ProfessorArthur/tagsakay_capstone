@@ -1,3 +1,40 @@
+/**
+ * useWebSocket Base Composable
+ * =============================
+ * DEPRECATION NOTICE (November 2024)
+ *
+ * This composable is kept for reference only. WebSocket functionality has been disabled
+ * throughout the application due to Cloudflare Workers free tier limitations.
+ *
+ * BACKGROUND:
+ * - Cloudflare Workers free tier does not support native WebSockets
+ * - WebSocket upgrade requires Durable Objects (paid feature)
+ * - Backend attempted WebSocket upgrade but received HTTP 200 instead of 101
+ *
+ * MIGRATION TO HTTP POLLING:
+ * - Backend: Added GET /api/devices/:deviceId/commands endpoint (returns command array)
+ * - ESP32: Polls commands endpoint every 5 seconds (COMMAND_POLL_INTERVAL)
+ * - Frontend: Uses polling state instead of WebSocket connection state
+ *
+ * CURRENT STATE:
+ * - useRealTimeScans: Disabled WebSocket, uses polling state simulation
+ * - useDeviceWebSocket: Disabled WebSocket, returns stub methods with warnings
+ * - Dashboard: Uses "polling-connected" events instead of "websocket-connected"
+ * - WebSocketTest page: Archived with deprecation notice
+ *
+ * FUTURE UPGRADE PATH:
+ * - When upgrading to Cloudflare Workers paid tier with Durable Objects:
+ *   1. Uncomment WebSocket imports in composables
+ *   2. Re-enable this base composable functionality
+ *   3. Update backend to properly handle WebSocket upgrades with Durable Objects
+ *   4. Test bidirectional communication flow
+ *   5. Remove HTTP polling simulation code
+ *
+ * For current HTTP polling implementation, see:
+ * - backend-workers/src/routes/device.ts (GET /:deviceId/commands endpoint)
+ * - TagSakay_Fixed_Complete/Diagnostics/DisplayDiagnostics.ino (pollCommands function)
+ * - frontend/src/composables/useRealTimeScans.ts (polling state management)
+ */
 import { ref, reactive, onUnmounted } from "vue";
 
 export interface WebSocketConfig {
