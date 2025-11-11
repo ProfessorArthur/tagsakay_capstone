@@ -49,7 +49,9 @@
           <tr>
             <th scope="col" class="px-4 py-3">Time</th>
             <th scope="col" class="px-4 py-3">Tag ID</th>
+            <th scope="col" class="px-4 py-3">Device</th>
             <th scope="col" class="px-4 py-3">Location</th>
+            <th scope="col" class="px-4 py-3">Seen</th>
             <th scope="col" class="px-4 py-3">Actions</th>
           </tr>
         </thead>
@@ -59,9 +61,11 @@
             :key="scan.id"
             class="border-b transition-colors duration-300 hover:bg-green-50"
           >
-            <td class="px-4 py-3">{{ formatTime(scan.scanTime) }}</td>
+            <td class="px-4 py-3">{{ formatTime(scan.lastSeen) }}</td>
             <td class="px-4 py-3 font-mono">{{ scan.tagId }}</td>
+            <td class="px-4 py-3">{{ scan.deviceId || "Unknown" }}</td>
             <td class="px-4 py-3">{{ scan.location || "Unknown" }}</td>
+            <td class="px-4 py-3">{{ scan.scanCount }}</td>
             <td class="px-4 py-3">
               <button
                 @click="selectTag(scan.tagId)"
@@ -79,7 +83,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, defineEmits } from "vue";
-import rfidService, { type RfidScan } from "../services/rfid";
+import rfidService, { type UnregisteredRfidScan } from "../services/rfid";
 
 const props = defineProps({
   refreshInterval: {
@@ -91,7 +95,7 @@ const props = defineProps({
 const emit = defineEmits(["selectTag"]);
 
 // Reactive state
-const scans = ref<any[]>([]);
+const scans = ref<UnregisteredRfidScan[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -116,7 +120,7 @@ const getRecentUnregisteredScans = async () => {
       // Add new scans without removing old ones, but avoid duplicates
       const existingIds = new Set(scans.value.map((scan) => scan.id));
       const newScans = response.data.filter(
-        (scan: RfidScan) => !existingIds.has(scan.id)
+        (scan: UnregisteredRfidScan) => !existingIds.has(scan.id)
       );
 
       // Add new scans to the beginning of the array

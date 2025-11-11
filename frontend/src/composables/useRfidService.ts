@@ -9,7 +9,7 @@ import type { Rfid, RfidScan, RegisterRfidData } from "../services/rfid";
 export function useRfidService() {
   // Individual API states for different operations
   const rfidListState = useApiState<Rfid[]>([]);
-  const unregisteredCardsState = useApiState<any[]>([]);
+  const unregisteredCardsState = useApiState<Rfid[]>([]);
   const registerState = useApiState<Rfid>();
   const updateState = useApiState<Rfid>();
 

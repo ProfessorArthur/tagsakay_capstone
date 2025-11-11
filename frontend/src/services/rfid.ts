@@ -1,23 +1,33 @@
 import apiClient from "./api";
 import type { ApiResponse } from "./api";
 
+interface RfidUserSummary {
+  id: number;
+  name: string;
+  email?: string;
+  role: string;
+}
+
 interface Rfid {
   id: string;
   tagId: string;
   userId: number | null;
+  user?: RfidUserSummary | null;
   isActive: boolean;
   lastScanned: string | null;
+  lastSeen?: string | null;
   deviceId: string | null;
-  registeredBy: number;
+  registeredBy?: number | null;
   metadata: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+  isRegistered?: boolean;
 }
 
 interface RfidScan {
   id: string;
   rfidTagId: string;
-  deviceId: string;
+  deviceId: string | null;
   userId: number | null;
   eventType: "entry" | "exit" | "unknown";
   location: string | null;
@@ -25,6 +35,15 @@ interface RfidScan {
   scanTime: string;
   status: "success" | "failed" | "unauthorized";
   metadata: Record<string, any>;
+}
+
+interface UnregisteredRfidScan {
+  id: string;
+  tagId: string;
+  lastSeen: string;
+  deviceId: string | null;
+  location: string | null;
+  scanCount: number;
 }
 
 interface RegisterRfidData {
@@ -112,26 +131,57 @@ const rfidService = {
   /**
    * Get unregistered RFID cards (scanned but not registered)
    */
-  async getUnregisteredCards(): Promise<ApiResponse<Rfid[]>> {
+  async getUnregisteredCards(): Promise<Rfid[]> {
     try {
       const response = await apiClient.get("/rfid/unregistered");
-      return response.data || { success: false, data: [] };
+      const payload = response.data;
+
+      if (Array.isArray(payload?.rfids)) {
+        return payload.rfids;
+      }
+
+      if (Array.isArray(payload?.unregisteredTags)) {
+        return payload.unregisteredTags;
+      }
+
+      if (Array.isArray(payload?.cards)) {
+        return payload.cards;
+      }
+
+      if (Array.isArray(payload)) {
+        return payload;
+      }
+
+      return [];
     } catch (error: any) {
       console.error("Failed to fetch unregistered cards:", error);
-      return { success: false, data: [] }; // Return empty array on error
+      return [];
     }
   },
 
   /**
    * Get all registered RFID cards
    */
-  async getAllRfidCards(): Promise<ApiResponse<Rfid[]>> {
+  async getAllRfidCards(): Promise<Rfid[]> {
     try {
       const response = await apiClient.get("/rfid");
-      return response.data || { success: false, data: [] };
+      const payload = response.data;
+      const rfids = Array.isArray(payload?.rfids)
+        ? payload.rfids
+        : Array.isArray(payload)
+        ? payload
+        : [];
+
+      return rfids.map((raw: any) => ({
+        ...raw,
+        tagId: typeof raw?.tagId === "string" ? raw.tagId.toUpperCase() : "",
+        isRegistered: Boolean(raw?.user?.id),
+        lastSeen: raw?.lastScanned ?? raw?.updatedAt ?? null,
+        metadata: raw?.metadata ?? {},
+      }));
     } catch (error: any) {
       console.error("Failed to fetch all RFID cards:", error);
-      return { success: false, data: [] }; // Return empty array on error
+      return [];
     }
   },
 
@@ -155,10 +205,21 @@ const rfidService = {
   /**
    * Get recent unregistered scans (for registration workflow)
    */
-  async getRecentUnregisteredScans(): Promise<ApiResponse<RfidScan[]>> {
+  async getRecentUnregisteredScans(): Promise<
+    ApiResponse<UnregisteredRfidScan[]>
+  > {
     try {
       const response = await apiClient.get("/rfid/scans/unregistered");
-      return response.data || { success: false, data: [] };
+      const payload = response.data;
+      const tags = Array.isArray(payload?.unregisteredTags)
+        ? payload.unregisteredTags
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      return {
+        success: true,
+        data: tags,
+      };
     } catch (error: any) {
       console.error("Failed to fetch recent unregistered scans:", error);
       return { success: false, data: [] }; // Return empty array on error to prevent component crashes
@@ -172,4 +233,4 @@ const rfidService = {
 };
 
 export default rfidService;
-export type { Rfid, RfidScan, RegisterRfidData };
+export type { Rfid, RfidScan, UnregisteredRfidScan, RegisterRfidData };

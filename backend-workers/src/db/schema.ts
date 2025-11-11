@@ -37,37 +37,6 @@ export const users = pgTable("Users", {
 });
 
 // RFIDs table
-export const rfids = pgTable("Rfids", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  tagId: varchar("tagId", { length: 255 }).notNull().unique(),
-  userId: integer("userId").references(() => users.id),
-  isActive: boolean("isActive").default(true),
-  lastScanned: timestamp("lastScanned"),
-  deviceId: varchar("deviceId", { length: 255 }),
-  registeredBy: integer("registeredBy")
-    .notNull()
-    .references(() => users.id),
-  metadata: json("metadata").default({}),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
-
-// RFID Scans table
-export const rfidScans = pgTable("RfidScans", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  rfidTagId: varchar("rfidTagId", { length: 255 }).notNull(),
-  deviceId: varchar("deviceId", { length: 255 }).notNull(),
-  userId: integer("userId").references(() => users.id),
-  eventType: eventTypeEnum("eventType").default("unknown").notNull(),
-  location: varchar("location", { length: 255 }),
-  vehicleId: varchar("vehicleId", { length: 255 }),
-  scanTime: timestamp("scanTime").defaultNow().notNull(),
-  status: scanStatusEnum("status").default("success").notNull(),
-  metadata: json("metadata").default({}),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
-
 // Devices table
 export const devices = pgTable("Devices", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -87,11 +56,59 @@ export const devices = pgTable("Devices", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
+// RFIDs table
+export const rfids = pgTable("Rfids", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tagId: varchar("tagId", { length: 255 }).notNull().unique(),
+  userId: integer("userId").references(() => users.id),
+  isActive: boolean("isActive").default(true),
+  lastScanned: timestamp("lastScanned"),
+  deviceId: varchar("deviceId", { length: 255 }).references(
+    () => devices.deviceId,
+    {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }
+  ),
+  registeredBy: integer("registeredBy")
+    .notNull()
+    .references(() => users.id),
+  metadata: json("metadata").default({}),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// RFID Scans table
+export const rfidScans = pgTable("RfidScans", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  rfidTagId: varchar("rfidTagId", { length: 255 }).notNull(),
+  deviceId: varchar("deviceId", { length: 255 })
+    .notNull()
+    .references(() => devices.deviceId, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
+  userId: integer("userId").references(() => users.id),
+  eventType: eventTypeEnum("eventType").default("unknown").notNull(),
+  location: varchar("location", { length: 255 }),
+  vehicleId: varchar("vehicleId", { length: 255 }),
+  scanTime: timestamp("scanTime").defaultNow().notNull(),
+  status: scanStatusEnum("status").default("success").notNull(),
+  metadata: json("metadata").default({}),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
 // API Keys table
 export const apiKeys = pgTable("ApiKeys", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 255 }).notNull(),
-  deviceId: varchar("deviceId", { length: 255 }).notNull(),
+  deviceId: varchar("deviceId", { length: 255 })
+    .notNull()
+    .references(() => devices.deviceId, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
   description: text("description"),
   key: text("key").notNull().unique(),
   prefix: varchar("prefix", { length: 10 }).notNull(),

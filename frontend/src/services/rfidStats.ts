@@ -1,6 +1,8 @@
 import api from "./api";
 import { ref } from "vue";
 import deviceService, { type Device } from "./device";
+import rfidService from "./rfid";
+import userService from "./user";
 
 export interface ScanStats {
   label: string;
@@ -19,7 +21,7 @@ export interface DeviceStatus {
 export interface RfidScanResult {
   id: string;
   rfidTagId: string;
-  deviceId: string;
+  deviceId: string | null;
   userId: number | null;
   eventType: "entry" | "exit" | "unknown";
   location: string | null;
@@ -31,7 +33,8 @@ export interface RfidScanResult {
     id: number;
     name: string;
     role: string;
-  };
+    isActive?: boolean;
+  } | null;
 }
 
 const recentScans = ref<RfidScanResult[]>([]);
@@ -112,7 +115,14 @@ const rfidStatsService = {
       loading.value = true;
       error.value = null;
       const response = await api.get(`/rfid/scans/recent?limit=${limit}`);
-      recentScans.value = response.data.data;
+      const payload = response.data;
+      const scans = Array.isArray(payload?.scans)
+        ? payload.scans
+        : Array.isArray(payload)
+        ? payload
+        : [];
+
+      recentScans.value = scans;
       return recentScans.value;
     } catch (err: any) {
       error.value =
@@ -158,31 +168,35 @@ const rfidStatsService = {
    */
   async getDashboardStats() {
     try {
-      const [weeklyStats, recentScans, devices, rfidCards, users] =
-        await Promise.all([
-          this.getWeeklyStats(),
-          this.getRecentScans(100),
-          deviceService.getAllDevices(),
-          api.get("/rfid"),
-          api.get("/users"),
-        ]);
+      const [
+        weeklyStats,
+        recentScanList,
+        deviceList,
+        rfidCardList,
+        usersResponse,
+      ] = await Promise.all([
+        this.getWeeklyStats(),
+        this.getRecentScans(100),
+        deviceService.getAllDevices(),
+        rfidService.getAllRfidCards(),
+        userService.getUsers(),
+      ]);
 
-      // Calculate today's scans
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
-      const todayScans = recentScans.filter(
-        (scan) =>
-          new Date(scan.scanTime) >= todayStart && scan.status === "success"
-      ).length;
+      const successfulScans = Array.isArray(recentScanList)
+        ? recentScanList.filter(
+            (scan) =>
+              new Date(scan.scanTime) >= todayStart && scan.status === "success"
+          )
+        : [];
 
-      // Calculate device statistics
-      const deviceList = devices;
       const onlineDevices = deviceList.filter(
         (device) => device.status === "online"
       ).length;
 
-      // Calculate user statistics
-      const allUsers = users.data || [];
+      const allUsers = Array.isArray(usersResponse) ? usersResponse : [];
+
       const userStats = {
         drivers: allUsers.filter((u: any) => u.role === "driver").length,
         admins: allUsers.filter((u: any) => u.role === "admin").length,
@@ -192,15 +206,17 @@ const rfidStatsService = {
       };
 
       return {
-        todayScans,
-        totalRegisteredCards: rfidCards.data?.length || 0,
+        todayScans: successfulScans.length,
+        totalRegisteredCards: rfidCardList.length,
         totalDevices: deviceList.length,
         onlineDevices,
         offlineDevices: deviceList.length - onlineDevices,
         totalUsers: allUsers.length,
         userStats,
         weeklyStats,
-        recentScansCount: recentScans.length,
+        recentScansCount: Array.isArray(recentScanList)
+          ? recentScanList.length
+          : 0,
       };
     } catch (error) {
       console.error("Error fetching dashboard statistics:", error);

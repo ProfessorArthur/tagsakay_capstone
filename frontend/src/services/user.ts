@@ -25,6 +25,18 @@ export interface User {
   role: "driver" | "admin" | "superadmin";
   isActive: boolean;
   rfidTag?: string;
+  rfids?: Array<{
+    id: string;
+    tagId: string;
+    isActive: boolean;
+    lastScanned?: string | null;
+  }>;
+  rfidTags?: Array<{
+    id: string;
+    tagId: string;
+    isActive: boolean;
+    lastScanned?: string | null;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -67,10 +79,20 @@ const validateName = (name: string): { valid: boolean; error?: string } => {
 };
 
 // Get all users
-const getUsers = async (): Promise<ApiResponse<User[]>> => {
+const getUsers = async (): Promise<User[]> => {
   try {
     const response = await apiClient.get("/users");
-    return response.data || { success: false, data: [] };
+    const rawUsers = Array.isArray(response.data)
+      ? response.data
+      : Array.isArray(response?.data?.data)
+      ? response.data.data
+      : [];
+
+    return rawUsers.map((user: User) => ({
+      ...user,
+      rfids: user.rfids ?? user.rfidTags ?? [],
+      rfidTags: user.rfidTags ?? user.rfids ?? [],
+    }));
   } catch (error: any) {
     console.error("Failed to fetch users:", error);
     throw new Error(error.message || "Failed to fetch users");
@@ -81,7 +103,12 @@ const getUsers = async (): Promise<ApiResponse<User[]>> => {
 const getUser = async (id: number): Promise<User> => {
   try {
     const response = await apiClient.get(`/users/${id}`);
-    return response.data;
+    const user = response.data as User;
+    return {
+      ...user,
+      rfids: user.rfids ?? user.rfidTags ?? [],
+      rfidTags: user.rfidTags ?? user.rfids ?? [],
+    };
   } catch (error: any) {
     console.error(`Failed to fetch user ${id}:`, error);
     throw new Error(error.message || "Failed to fetch user");

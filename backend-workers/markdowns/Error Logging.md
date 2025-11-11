@@ -67,3 +67,17 @@ Date of Fix: 2025-11-11
 Details: Updated backend `/api/devices`, `/api/devices/active`, heartbeat, and mode endpoints to enrich every device payload with `status`, ISO `lastSeen`, and `lastSeenAgoSeconds`, treating missing heartbeats as offline. Frontend services now normalize those responses, filter stale records, and map the enriched fields into dashboard and RFID card views, restoring accurate device presence indicators across the UI.
 
 ---
+
+Date: 2025-11-11
+Error Encountered: RFID card registration “fiasco” — ESP32 scans reached the worker logs, but neither the backend nor the Vue admin panel surfaced the tag for assignment, so cards could not be registered.
+Date of Fix: 2025-11-12
+Details: Discovered three compounding issues: (1) `rfid.ts` stored device metadata as `null`, causing `JSON.parse` failures on the frontend; (2) API responses returned nested structures that the Vue services weren’t normalizing, so unregistered scans never appeared in the tables; (3) Registration mode expected WebSocket acknowledgements that no longer existed after moving to HTTP polling. Fixed by defaulting metadata to `{}` in the worker, normalizing RFID scan payloads (flattening device info and counts), updating Vue services/components to consume the new shape, and wiring the registration modal to the HTTP command-poll workflow. After redeploying firmware and frontend, scanned cards now surface immediately for registration and persist correctly in the database.
+
+---
+
+Date: 2025-11-12
+Error Encountered: User Management and RFID card assignment views rendered empty tables even though `/api/users` returned data.
+Date of Fix: 2025-11-12
+Details: Axios interceptor already unwraps the `{ success, data }` envelope, but `userService.getUsers()` still expected a nested `response.data` object, returning `undefined`. Normalized the service to output an array and updated consuming views (`UserManagement.vue`, `RfidCardManagement.vue`, dashboard stats) to read the shared `User` type, restoring user listings across the UI.
+
+---

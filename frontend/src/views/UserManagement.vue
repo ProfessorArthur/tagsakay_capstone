@@ -1,19 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import userService from "../services/user";
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  isActive: boolean;
-  rfids?: Array<{
-    id: number;
-    tagId: string;
-    isActive: boolean;
-  }>;
-}
+import userService, { type User } from "../services/user";
 
 // State management
 const users = ref<User[]>([]);
@@ -44,7 +31,7 @@ async function fetchUsers() {
 
   try {
     const response = await userService.getUsers();
-    users.value = response.data || [];
+    users.value = response || [];
   } catch (err) {
     error.value = "Failed to load users. Please try again.";
     console.error("Error fetching users:", err);

@@ -28,6 +28,7 @@
           <tr>
             <th scope="col" class="px-4 py-3">Time</th>
             <th scope="col" class="px-4 py-3">Tag ID</th>
+            <th scope="col" class="px-4 py-3">Device</th>
             <th scope="col" class="px-4 py-3">User</th>
             <th scope="col" class="px-4 py-3">Location</th>
             <th scope="col" class="px-4 py-3">Event</th>
@@ -47,6 +48,7 @@
           >
             <td class="px-4 py-3">{{ formatTime(scan.scanTime) }}</td>
             <td class="px-4 py-3 font-mono">{{ scan.rfidTagId }}</td>
+            <td class="px-4 py-3">{{ scan.deviceId || "Unknown" }}</td>
             <td class="px-4 py-3">{{ scan.user?.name || "Unknown" }}</td>
             <td class="px-4 py-3">{{ scan.location || "Unknown" }}</td>
             <td class="px-4 py-3">
@@ -91,7 +93,7 @@
             </td>
           </tr>
           <tr v-if="scans.length === 0">
-            <td colspan="6" class="px-4 py-6 text-center text-gray-500">
+            <td colspan="7" class="px-4 py-6 text-center text-gray-500">
               No recent RFID scans detected
             </td>
           </tr>

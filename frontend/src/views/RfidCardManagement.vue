@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
-import rfidService from "../services/rfid";
-import userService from "../services/user";
+import rfidService, {
+  type Rfid,
+  type RegisterRfidData,
+  type UnregisteredRfidScan,
+} from "../services/rfid";
+import userService, { type User } from "../services/user";
 import deviceService from "../services/device";
-import type { RegisterRfidData } from "../services/rfid";
 
 // State
-const rfidCards = ref<any[]>([]);
-const users = ref<any[]>([]);
+const rfidCards = ref<Rfid[]>([]);
+const users = ref<User[]>([]);
 const loading = ref(true);
 const error = ref("");
 const success = ref("");
@@ -16,7 +19,7 @@ const activeDevices = ref<any[]>([]);
 
 // Modal state
 const showRegisterModal = ref(false);
-const selectedCard = ref<any>(null);
+const selectedCard = ref<Rfid | null>(null);
 const awaitingConfirmation = ref(false);
 const pendingRegistration = ref<string | null>(null);
 
@@ -113,8 +116,18 @@ const loadRfidCards = async () => {
   error.value = "";
 
   try {
-    const response = await rfidService.getAllRfidCards();
-    rfidCards.value = response.data || [];
+    const cards = await rfidService.getAllRfidCards();
+    rfidCards.value = cards
+      .map((card) => ({
+        ...card,
+        isRegistered: card.isRegistered ?? Boolean(card.user),
+        lastSeen: card.lastSeen ?? card.lastScanned ?? card.updatedAt ?? null,
+      }))
+      .sort((a, b) => {
+        const aTime = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+        const bTime = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+        return bTime - aTime;
+      });
   } catch (err) {
     console.error("Error fetching RFID cards:", err);
     error.value = "Failed to load RFID cards";
@@ -127,7 +140,11 @@ const loadRfidCards = async () => {
 const loadUsers = async () => {
   try {
     const response = await userService.getUsers();
-    users.value = response.data || [];
+    users.value = (response || []).map((user) => ({
+      ...user,
+      rfids: user.rfids ?? user.rfidTags ?? [],
+      rfidTags: user.rfidTags ?? user.rfids ?? [],
+    }));
   } catch (err) {
     console.error("Error fetching users:", err);
     error.value = "Failed to load users";
@@ -223,18 +240,22 @@ const startPollingForNewTag = () => {
 
       if (response.data && response.data.length > 0) {
         // Take the most recent scan
-        const latestScan = response.data[0];
+        const latestScan: UnregisteredRfidScan | undefined = response.data[0];
+
+        if (!latestScan) {
+          return;
+        }
 
         // Stop polling
         stopPollingForNewTag();
 
         // Update form with the scanned tag
-        formData.value.tagId = latestScan.rfidTagId;
+        formData.value.tagId = latestScan.tagId;
 
         // Update state
-        pendingRegistration.value = latestScan.rfidTagId;
+        pendingRegistration.value = latestScan.tagId;
         awaitingConfirmation.value = false;
-        success.value = `New tag detected: ${latestScan.rfidTagId}! Please complete the registration form.`;
+        success.value = `New tag detected: ${latestScan.tagId}! Please complete the registration form.`;
 
         // Turn off registration mode on devices
         if (activeDevices.value.length > 0) {
@@ -306,7 +327,7 @@ const checkForNewScans = async () => {
 };
 
 // Start the registration process for an unregistered card
-const startRegistration = async (card: any) => {
+const startRegistration = async (card: Rfid) => {
   // Store the card we're registering
   selectedCard.value = card;
   pendingRegistration.value = card.tagId;
@@ -428,7 +449,7 @@ const registerRfid = async () => {
 };
 
 // Toggle RFID card active status
-const toggleCardStatus = async (card: any) => {
+const toggleCardStatus = async (card: Rfid) => {
   try {
     await rfidService.updateRfidStatus(card.id, !card.isActive);
     success.value = `Card ${card.tagId} ${

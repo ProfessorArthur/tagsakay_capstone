@@ -16,12 +16,12 @@ SPIClass hspi(HSPI);
 Adafruit_PN532 nfc(PN532_SS, &hspi);
 
 // WiFi credentials (edit in Config.h or here)
-const char* WIFI_SSID = "MyQueen";
-const char* WIFI_PASSWORD = "ThaiQueen07";
+const char* WIFI_SSID = "SSID";
+const char* WIFI_PASSWORD = "PASSWORD";
 
 // API Configuration
 const char* API_BASE_URL = "https://api.tagsakay.com";
-const char* API_KEY = "tsk_EWFS5d43StQY1TgFmusJ2aNPyWnjPcER";  // Set your device API key here
+const char* API_KEY = "API_KEY";  // Set your device API key here
 
 // System state
 bool wifiConnected = false;
@@ -1030,20 +1030,40 @@ void handleRFIDScanning() {
       
       // Handle registration mode
       if (registrationMode && currentStage == STAGE_REGISTRATION_TEST) {
-        if (expectedRegistrationTagId.length() > 0) {
-          if (tagId.equalsIgnoreCase(expectedRegistrationTagId)) {
+        const bool wildcardExpected = expectedRegistrationTagId.length() == 0 ||
+                                      expectedRegistrationTagId.equalsIgnoreCase("new");
+
+        if (wildcardExpected || tagId.equalsIgnoreCase(expectedRegistrationTagId)) {
+          if (wildcardExpected) {
+            Serial.println("[REGISTRATION] Wildcard match – capturing first tag");
+            expectedRegistrationTagId = tagId;
+          } else {
             Serial.println("[REGISTRATION] ✓ Tag match! Registration confirmed.");
+          }
+
+          bool sentToApi = sendRFIDScanToAPI(tagId);
+          const bool isUnregisteredResponse = lastApiHttpCode == 404;
+
+          if (sentToApi || isUnregisteredResponse) {
+            if (sentToApi) {
+              Serial.println("[REGISTRATION] Scan forwarded to backend");
+              setFooterMessage(F("Registration submitted to server"));
+            } else {
+              Serial.println("[REGISTRATION] Tag not in system yet – awaiting admin action");
+              setFooterMessage(F("Tag captured – complete setup in admin"));
+            }
+
             registrationMode = false;
             expectedRegistrationTagId = "";
-            setFooterMessage(F("Registration successful!"));
           } else {
-            Serial.println("[REGISTRATION] ✗ Tag mismatch!");
-            setFooterMessage(F("Wrong tag - try again"));
+            Serial.printf("[REGISTRATION] Failed to submit scan – HTTP %d\n", lastApiHttpCode);
+            setFooterMessage(F("Registration failed – check API"));
           }
         } else {
-          Serial.println("[REGISTRATION] No expected tag set");
-          setFooterMessage(F("No tag expected"));
+          Serial.println("[REGISTRATION] ✗ Tag mismatch!");
+          setFooterMessage(F("Wrong tag - try again"));
         }
+
         drawStage(currentStage);
       }
       // In full system mode, automatically send to API via HTTP
