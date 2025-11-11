@@ -85,8 +85,15 @@ const refreshDevices = async () => {
   }
 };
 
-const formatTimestamp = (timestamp: string): string => {
+const formatTimestamp = (timestamp: string | null): string => {
+  if (!timestamp) {
+    return "Never";
+  }
+
   const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
 
   // If it's today, show "Today at HH:MM"
   const today = new Date();

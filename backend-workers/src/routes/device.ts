@@ -25,6 +25,73 @@ type Env = {
 
 const app = new Hono<Env>();
 
+const DEVICE_ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+type DeviceResponseRecord = {
+  id: string;
+  deviceId: string;
+  macAddress: string;
+  name: string;
+  location: string;
+  isActive: boolean | null;
+  registrationMode: boolean | null;
+  scanMode: boolean | null;
+  pendingRegistrationTagId?: string | null;
+  lastSeen: Date | string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+};
+
+type EnrichedDeviceRecord = DeviceResponseRecord & {
+  status: "online" | "offline";
+  lastSeenAgoSeconds: number | null;
+};
+
+const toIsoString = (
+  value: Date | string | null | undefined
+): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+const enrichDeviceRecord = (
+  device: DeviceResponseRecord
+): EnrichedDeviceRecord => {
+  const now = Date.now();
+  const lastSeenIso = toIsoString(device.lastSeen);
+  const lastSeenDate = lastSeenIso ? new Date(lastSeenIso) : null;
+  const isActive = device.isActive ?? false;
+
+  const isOnline =
+    isActive &&
+    lastSeenDate !== null &&
+    now - lastSeenDate.getTime() <= DEVICE_ONLINE_THRESHOLD_MS;
+
+  return {
+    ...device,
+    isActive,
+    registrationMode: device.registrationMode ?? false,
+    scanMode: device.scanMode ?? false,
+    pendingRegistrationTagId: device.pendingRegistrationTagId ?? "",
+    lastSeen: lastSeenIso,
+    createdAt: toIsoString(device.createdAt),
+    updatedAt: toIsoString(device.updatedAt),
+    status: isOnline ? "online" : "offline",
+    lastSeenAgoSeconds:
+      lastSeenDate === null
+        ? null
+        : Math.floor((now - lastSeenDate.getTime()) / 1000),
+  };
+};
+
 // POST /api/devices/register - Register new device (admin/superadmin only)
 app.post(
   "/register",
@@ -86,19 +153,27 @@ app.post(
         })
         .returning();
 
+      const registeredDevice = enrichDeviceRecord({
+        id: newDevice.id,
+        deviceId: newDevice.deviceId,
+        macAddress: newDevice.macAddress,
+        name: newDevice.name,
+        location: newDevice.location,
+        isActive: newDevice.isActive,
+        registrationMode: newDevice.registrationMode,
+        scanMode: newDevice.scanMode,
+        pendingRegistrationTagId: newDevice.pendingRegistrationTagId,
+        lastSeen: newDevice.lastSeen,
+        createdAt: newDevice.createdAt,
+        updatedAt: newDevice.updatedAt,
+      });
+
       return c.json(
         {
           success: true,
           message: "Device registered successfully",
           data: {
-            device: {
-              id: newDevice.id,
-              deviceId: newDevice.deviceId,
-              macAddress: newDevice.macAddress,
-              name: newDevice.name,
-              location: newDevice.location,
-              isActive: newDevice.isActive,
-            },
+            device: registeredDevice,
             apiKey: apiKey, // Return plain API key only once
           },
         },
@@ -133,18 +208,28 @@ app.get("/", authMiddleware, requireRole("admin", "superadmin"), async (c) => {
         isActive: devices.isActive,
         registrationMode: devices.registrationMode,
         scanMode: devices.scanMode,
+        pendingRegistrationTagId: devices.pendingRegistrationTagId,
         lastSeen: devices.lastSeen,
         createdAt: devices.createdAt,
+        updatedAt: devices.updatedAt,
       })
       .from(devices)
       .orderBy(desc(devices.lastSeen));
 
+    const enrichedDevices = allDevices.map(enrichDeviceRecord);
+    const onlineCount = enrichedDevices.filter(
+      (device) => device.status === "online"
+    ).length;
+    const offlineCount = enrichedDevices.length - onlineCount;
+
     return c.json({
       success: true,
-      message: `Retrieved ${allDevices.length} devices`,
+      message: `Retrieved ${enrichedDevices.length} devices`,
       data: {
-        devices: allDevices,
-        total: allDevices.length,
+        devices: enrichedDevices,
+        total: enrichedDevices.length,
+        online: onlineCount,
+        offline: offlineCount,
       },
     });
   } catch (error: any) {
@@ -179,19 +264,30 @@ app.get(
           isActive: devices.isActive,
           registrationMode: devices.registrationMode,
           scanMode: devices.scanMode,
+          pendingRegistrationTagId: devices.pendingRegistrationTagId,
           lastSeen: devices.lastSeen,
           createdAt: devices.createdAt,
+          updatedAt: devices.updatedAt,
         })
         .from(devices)
         .where(eq(devices.isActive, true))
         .orderBy(desc(devices.lastSeen));
 
+      const enrichedActiveDevices = activeDevices.map(enrichDeviceRecord);
+      const onlineDevices = enrichedActiveDevices.filter(
+        (device) => device.status === "online"
+      );
+      const staleDevices = enrichedActiveDevices.filter(
+        (device) => device.status === "offline"
+      );
+
       return c.json({
         success: true,
-        message: `Retrieved ${activeDevices.length} active devices`,
+        message: `Retrieved ${onlineDevices.length} online devices`,
         data: {
-          devices: activeDevices,
-          total: activeDevices.length,
+          devices: onlineDevices,
+          total: onlineDevices.length,
+          stale: staleDevices,
         },
       });
     } catch (error: any) {
@@ -247,7 +343,7 @@ app.get("/:deviceId", authMiddleware, async (c) => {
       success: true,
       message: "Device retrieved successfully",
       data: {
-        device,
+        device: enrichDeviceRecord(device),
       },
     });
   } catch (error: any) {
@@ -307,17 +403,26 @@ app.put(
         .where(eq(devices.deviceId, deviceId))
         .returning();
 
+      const responseDevice = enrichDeviceRecord({
+        id: updatedDevice.id,
+        deviceId: updatedDevice.deviceId,
+        macAddress: updatedDevice.macAddress,
+        name: updatedDevice.name,
+        location: updatedDevice.location,
+        isActive: updatedDevice.isActive,
+        registrationMode: updatedDevice.registrationMode,
+        scanMode: updatedDevice.scanMode,
+        pendingRegistrationTagId: updatedDevice.pendingRegistrationTagId,
+        lastSeen: updatedDevice.lastSeen,
+        createdAt: updatedDevice.createdAt,
+        updatedAt: updatedDevice.updatedAt,
+      });
+
       return c.json({
         success: true,
         message: "Device updated successfully",
         data: {
-          device: {
-            id: updatedDevice.id,
-            deviceId: updatedDevice.deviceId,
-            name: updatedDevice.name,
-            location: updatedDevice.location,
-            isActive: updatedDevice.isActive,
-          },
+          device: responseDevice,
         },
       });
     } catch (error: any) {
@@ -518,18 +623,26 @@ app.post("/:deviceId/heartbeat", deviceAuthMiddleware, async (c) => {
       );
     }
 
+    const heartbeatDevice = enrichDeviceRecord({
+      id: updatedDevice.id,
+      deviceId: updatedDevice.deviceId,
+      macAddress: updatedDevice.macAddress,
+      name: updatedDevice.name,
+      location: updatedDevice.location,
+      isActive: updatedDevice.isActive,
+      registrationMode: updatedDevice.registrationMode,
+      scanMode: updatedDevice.scanMode,
+      pendingRegistrationTagId: updatedDevice.pendingRegistrationTagId,
+      lastSeen: updatedDevice.lastSeen,
+      createdAt: updatedDevice.createdAt,
+      updatedAt: updatedDevice.updatedAt,
+    });
+
     return c.json({
       success: true,
       message: "Heartbeat received",
       data: {
-        device: {
-          deviceId: updatedDevice.deviceId,
-          isActive: updatedDevice.isActive,
-          registrationMode: updatedDevice.registrationMode,
-          scanMode: updatedDevice.scanMode,
-          pendingRegistrationTagId: updatedDevice.pendingRegistrationTagId,
-          lastSeen: updatedDevice.lastSeen,
-        },
+        device: heartbeatDevice,
       },
     });
   } catch (error: any) {
@@ -592,16 +705,26 @@ app.post(
         .where(eq(devices.deviceId, deviceId))
         .returning();
 
+      const responseDevice = enrichDeviceRecord({
+        id: updatedDevice.id,
+        deviceId: updatedDevice.deviceId,
+        macAddress: updatedDevice.macAddress,
+        name: updatedDevice.name,
+        location: updatedDevice.location,
+        isActive: updatedDevice.isActive,
+        registrationMode: updatedDevice.registrationMode,
+        scanMode: updatedDevice.scanMode,
+        pendingRegistrationTagId: updatedDevice.pendingRegistrationTagId,
+        lastSeen: updatedDevice.lastSeen,
+        createdAt: updatedDevice.createdAt,
+        updatedAt: updatedDevice.updatedAt,
+      });
+
       return c.json({
         success: true,
         message: "Device mode updated successfully",
         data: {
-          device: {
-            deviceId: updatedDevice.deviceId,
-            registrationMode: updatedDevice.registrationMode,
-            scanMode: updatedDevice.scanMode,
-            pendingRegistrationTagId: updatedDevice.pendingRegistrationTagId,
-          },
+          device: responseDevice,
         },
       });
     } catch (error: any) {

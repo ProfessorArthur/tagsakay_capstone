@@ -2,7 +2,8 @@ import api from "./api";
 import type { ApiResponse } from "./api";
 
 export interface Device {
-  id: number;
+  id: string;
+  recordId?: string;
   deviceId: string;
   macAddress: string;
   name: string;
@@ -10,10 +11,12 @@ export interface Device {
   isActive: boolean;
   registrationMode: boolean;
   scanMode: boolean;
-  pendingRegistrationTagId?: string;
-  lastSeen?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  pendingRegistrationTagId: string;
+  status?: "online" | "offline";
+  lastSeen?: string | null;
+  lastSeenAgoSeconds?: number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface RegisterDeviceRequest {
@@ -98,6 +101,85 @@ const validateLocation = (
   return { valid: true };
 };
 
+const DEVICE_STALE_THRESHOLD_MS = 2 * 60 * 1000;
+
+const toIsoString = (
+  value: string | Date | null | undefined
+): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+const secondsFromNow = (isoString: string | null): number | null => {
+  if (!isoString) {
+    return null;
+  }
+
+  const timestamp = new Date(isoString).getTime();
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+
+  return Math.floor((Date.now() - timestamp) / 1000);
+};
+
+const deriveStatus = (raw: any): "online" | "offline" => {
+  const isActive = Boolean(raw?.isActive);
+  if (!isActive) {
+    return "offline";
+  }
+
+  const lastSeenIso = toIsoString(raw?.lastSeen);
+  if (!lastSeenIso) {
+    return "offline";
+  }
+
+  return Date.now() - new Date(lastSeenIso).getTime() <=
+    DEVICE_STALE_THRESHOLD_MS
+    ? "online"
+    : "offline";
+};
+
+const normalizeDevice = (raw: any): Device => {
+  const deviceId = raw?.deviceId ?? raw?.id;
+  if (!deviceId) {
+    throw new Error("Device payload missing deviceId");
+  }
+
+  const lastSeen = toIsoString(raw?.lastSeen);
+  const status =
+    typeof raw?.status === "string" ? raw.status : deriveStatus(raw);
+
+  return {
+    id: deviceId,
+    recordId: raw?.id && raw.id !== deviceId ? raw.id : undefined,
+    deviceId,
+    macAddress: raw?.macAddress ?? "",
+    name: raw?.name ?? deviceId,
+    location: raw?.location ?? "",
+    isActive: Boolean(raw?.isActive),
+    registrationMode: Boolean(raw?.registrationMode),
+    scanMode: Boolean(raw?.scanMode),
+    pendingRegistrationTagId: raw?.pendingRegistrationTagId ?? "",
+    status,
+    lastSeen,
+    lastSeenAgoSeconds:
+      typeof raw?.lastSeenAgoSeconds === "number"
+        ? raw.lastSeenAgoSeconds
+        : secondsFromNow(lastSeen),
+    createdAt: toIsoString(raw?.createdAt),
+    updatedAt: toIsoString(raw?.updatedAt),
+  };
+};
+
 const deviceService = {
   /**
    * Register a new device with its MAC address
@@ -146,7 +228,25 @@ const deviceService = {
   getActiveDevices: async (): Promise<Device[]> => {
     try {
       const response = await api.get("/devices/active");
-      return response.data?.devices || [];
+      const devices = Array.isArray(response.data?.devices)
+        ? response.data.devices.map(normalizeDevice)
+        : [];
+
+      const staleDevices = Array.isArray(response.data?.stale)
+        ? response.data.stale.map(normalizeDevice)
+        : [];
+
+      if (staleDevices.length > 0) {
+        console.debug(
+          "[device-service] Stale devices awaiting heartbeat:",
+          staleDevices.map((device: Device) => ({
+            deviceId: device.deviceId,
+            lastSeen: device.lastSeen,
+          }))
+        );
+      }
+
+      return devices.filter((device: Device) => device.status === "online");
     } catch (error: any) {
       console.error("Failed to fetch active devices:", error);
       return [];
@@ -159,7 +259,9 @@ const deviceService = {
   getAllDevices: async (): Promise<Device[]> => {
     try {
       const response = await api.get("/devices");
-      return response.data?.devices || [];
+      return Array.isArray(response.data?.devices)
+        ? response.data.devices.map(normalizeDevice)
+        : [];
     } catch (error: any) {
       console.error("Failed to fetch all devices:", error);
       return [];

@@ -16,19 +16,21 @@ SPIClass hspi(HSPI);
 Adafruit_PN532 nfc(PN532_SS, &hspi);
 
 // WiFi credentials (edit in Config.h or here)
-const char* WIFI_SSID = "SSID";
-const char* WIFI_PASSWORD = "Password";
+const char* WIFI_SSID = "MyQueen";
+const char* WIFI_PASSWORD = "ThaiQueen07";
 
 // API Configuration
 const char* API_BASE_URL = "https://api.tagsakay.com";
-const char* API_KEY = "";  // Set your device API key here
+const char* API_KEY = "tsk_EWFS5d43StQY1TgFmusJ2aNPyWnjPcER";  // Set your device API key here
 
 // System state
 bool wifiConnected = false;
 bool rfidInitialized = false;
 bool apiConnected = false;
-bool pollingActive = false;
 bool registrationMode = false;
+bool deviceActive = false;
+bool scanModeEnabled = false;
+String serverLastSeen = "";
 String deviceMac = "";
 String expectedRegistrationTagId = "";
 unsigned long registrationModeStartTime = 0;
@@ -36,6 +38,10 @@ int rfidScanCount = 0;
 String lastRfidTag = "";
 unsigned long lastScanTime = 0;
 unsigned long lastCommandPoll = 0;
+unsigned long lastKeyTime = 0;
+char lastProcessedKey = 0;
+const unsigned long KEY_DEBOUNCE_MS = 500;
+
 int apiRequestCount = 0;
 int apiHealthChecks = 0;
 int apiHeartbeats = 0;
@@ -44,7 +50,9 @@ String lastApiResponse = "";
 int lastApiHttpCode = 0;
 int lastHealthHttpCode = 0;
 int lastHeartbeatHttpCode = 0;
+unsigned long lastHeartbeatTime = 0;
 int lastCommandHttpCode = 0;
+
 
 byte keypadRowPins[KEYPAD_ROWS] = {25, 26, 32, 33};
 byte keypadColPins[KEYPAD_COLS] = {5, 19, 21, 22};
@@ -72,7 +80,6 @@ enum TestStage : uint8_t {
   STAGE_WIFI_TEST,
   STAGE_RFID_TEST,
   STAGE_API_TEST,
-  STAGE_COMMAND_POLL_TEST,
   STAGE_REGISTRATION_TEST,
   STAGE_FULL_SYSTEM,
   STAGE_COUNT
@@ -98,8 +105,7 @@ const StageLabel stageLabels[] = {
   {STAGE_WIFI_TEST, "WiFi test"},
   {STAGE_RFID_TEST, "RFID test"},
   {STAGE_API_TEST, "API test"},
-  {STAGE_COMMAND_POLL_TEST, "Command poll test"},
-  {STAGE_REGISTRATION_TEST, "Registration test"},
+  {STAGE_REGISTRATION_TEST, "Registration & poll"},
   {STAGE_FULL_SYSTEM, "Full system"}
 };
 
@@ -144,7 +150,6 @@ bool initializeRFID();
 void drawWiFiTest();
 void drawRFIDTest();
 void drawAPITest();
-void drawCommandPollTest();
 void drawRegistrationTest();
 void drawFullSystemTest();
 void handleRFIDScanning();
@@ -153,7 +158,6 @@ bool testAPIHeartbeat();
 bool sendRFIDScanToAPI(const String& tagId);
 void initializePolling();
 void pollCommands();
-void toggleRegistrationMode();
 
 void setup() {
   Serial.begin(115200);
@@ -202,11 +206,6 @@ void setup() {
 
   runPanelDiagnostics();
   
-  // Initialize WebSocket if WiFi is configured
-  if (wifiConnected) {
-    initializePolling();
-  }
-  
   setFooterMessage(F("Auto advance enabled (press A for menu)"));
   drawStage(currentStage);
   lastStageChange = millis();
@@ -214,16 +213,6 @@ void setup() {
 
 void loop() {
   handleKeypad();
-  
-  // HTTP command polling every 5 seconds
-  if (pollingActive && wifiConnected && (millis() - lastCommandPoll >= COMMAND_POLL_INTERVAL)) {
-    pollCommands();
-  }
-  
-  // Send heartbeat every 30 seconds (via testAPIHeartbeat)
-  if (apiConnected && wifiConnected && (millis() - lastCommandPoll >= HEARTBEAT_INTERVAL)) {
-    testAPIHeartbeat();
-  }
   
   // RFID scanning in RFID test, registration test, and full system modes
   if ((currentStage == STAGE_RFID_TEST || currentStage == STAGE_REGISTRATION_TEST || currentStage == STAGE_FULL_SYSTEM) && rfidInitialized) {
@@ -365,9 +354,6 @@ void drawStage(TestStage stage) {
       break;
     case STAGE_API_TEST:
       drawAPITest();
-      break;
-    case STAGE_COMMAND_POLL_TEST:
-      drawCommandPollTest();
       break;
     case STAGE_REGISTRATION_TEST:
       drawRegistrationTest();
@@ -552,7 +538,17 @@ void handleKeypad() {
     return;
   }
 
+  // Debounce: ignore if same key pressed within debounce window
+  unsigned long now = millis();
+  if (key == lastProcessedKey && (now - lastKeyTime) < KEY_DEBOUNCE_MS) {
+    return;  // Ignore repeated key press
+  }
+
+  // Update debounce tracking
+  lastProcessedKey = key;
+  lastKeyTime = now;
   lastKeyPressed = key;
+  
   Serial.print("[KEYPAD] Key = ");
   Serial.println(key);
 
@@ -644,22 +640,11 @@ void handleMenuSelection(char key) {
       setFooterMessage(F("API connectivity test"));
       break;
     case '8':
-      Serial.println("[MENU] Command Poll Test");
-      currentStage = STAGE_COMMAND_POLL_TEST;
-      commandPollCount = 0;
-      lastCommandPoll = 0;
-      drawStage(currentStage);
-      autoAdvance = false;
-      setFooterMessage(F("HTTP command polling test"));
-      break;
-    case '9':
       Serial.println("[MENU] Registration Test");
       currentStage = STAGE_REGISTRATION_TEST;
-      registrationMode = false;
-      expectedRegistrationTagId = "";
       drawStage(currentStage);
       autoAdvance = false;
-      setFooterMessage(F("RFID card registration test"));
+      setFooterMessage(F("Registration & polling test"));
       break;
     case '0':
       Serial.println("[MENU] Full System Test");
@@ -675,51 +660,43 @@ void handleMenuSelection(char key) {
       drawStage(currentStage);
       break;
     case '*':
-      // WiFi connect/disconnect toggle or API test action
-      if (currentStage == STAGE_WIFI_TEST) {
+    // WiFi connect/disconnect toggle or API test action
+    if (currentStage == STAGE_WIFI_TEST) {
         if (wifiConnected) {
-          WiFi.disconnect();
-          wifiConnected = false;
-          Serial.println("[WIFI] Disconnected");
+            WiFi.disconnect();
+            wifiConnected = false;
+            Serial.println("[WIFI] Disconnected");
         } else {
-          initializeWiFi();
+            initializeWiFi();
         }
         drawStage(currentStage);
-      } else if (currentStage == STAGE_API_TEST) {
+    } else if (currentStage == STAGE_API_TEST) {
         // Test API connection (health then heartbeat)
         if (wifiConnected) {
-          setFooterMessage(F("Testing API..."));
-          testAPIHealth();
-          delay(500);
-          testAPIHeartbeat();
-          drawStage(currentStage);
+            setFooterMessage(F("Testing API..."));
+            testAPIHealth();
+            testAPIHeartbeat();
+            drawStage(currentStage);
         } else {
-          setFooterMessage(F("WiFi required for API test"));
+            setFooterMessage(F("WiFi required for API test"));
         }
-      } else if (currentStage == STAGE_COMMAND_POLL_TEST) {
-        // Toggle HTTP polling
-        if (pollingActive) {
-          pollingActive = false;
-          setFooterMessage(F("Polling stopped"));
-        } else {
-          initializePolling();
-          setFooterMessage(F("Polling started"));
-        }
-        delay(500);
+    } else if (currentStage == STAGE_REGISTRATION_TEST) {
+    if (wifiConnected) {
+      initializePolling();
+      setFooterMessage(F("Polled commands and sent heartbeat"));
+    } else {
+      setFooterMessage(F("WiFi required for polling"));
+    }
         drawStage(currentStage);
-      } else if (currentStage == STAGE_REGISTRATION_TEST) {
-        // Toggle registration mode
-        toggleRegistrationMode();
-        drawStage(currentStage);
-      } else if (currentStage == STAGE_FULL_SYSTEM) {
+    } else if (currentStage == STAGE_FULL_SYSTEM) {
         // Send last RFID tag to API
         if (wifiConnected && lastRfidTag.length() > 0) {
-          setFooterMessage(F("Sending to API..."));
-          sendRFIDScanToAPI(lastRfidTag);
-          drawStage(currentStage);
+            setFooterMessage(F("Sending to API..."));
+            sendRFIDScanToAPI(lastRfidTag);
+            drawStage(currentStage);
         }
-      }
-      break;
+    }
+    break;
     default:
       setFooterMessage(F("Invalid menu key"));
       break;
@@ -752,16 +729,14 @@ void renderMenuPanel() {
   tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 104);
   tft.println("7: API test");
   tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 116);
-  tft.println("8: Cmd Poll");
+  tft.println("8: Registration/poll");
   tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 128);
-  tft.println("9: Registration");
-  tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 140);
   tft.println("0: Full system");
-  tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 160);
+  tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 148);
   tft.println("B: Auto toggle");
-  tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 172);
+  tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 160);
   tft.println("C/D: Next/Prev");
-  tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 184);
+  tft.setCursor(MENU_PANEL_X + 10, MENU_PANEL_Y + 172);
   tft.println("#: Close menu");
 }
 
@@ -964,18 +939,30 @@ void drawFullSystemTest() {
   
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, 125);
-  tft.print("Polling: ");
-  tft.setTextColor(pollingActive ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  tft.println(pollingActive ? "OK" : "Inactive");
-  
+  tft.print("Device: ");
+  tft.setTextColor(deviceActive ? TFT_GREEN : TFT_RED, TFT_BLACK);
+  tft.println(deviceActive ? "Active" : "Inactive");
+
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, 140);
+  tft.print("Scan Mode: ");
+  tft.setTextColor(scanModeEnabled ? TFT_ORANGE : TFT_CYAN, TFT_BLACK);
+  tft.println(scanModeEnabled ? "Enabled" : "Disabled");
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 155);
+  tft.print("Polling: ");
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.println("Manual trigger");
+  
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 170);
   tft.print("Display: ");
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
   tft.println("OK");
   
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 155);
+  tft.setCursor(LEFT_MARGIN, 185);
   tft.print("Keypad: ");
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
   tft.println("OK");
@@ -1059,19 +1046,33 @@ void handleRFIDScanning() {
         }
         drawStage(currentStage);
       }
-      // In full system mode, automatically send to API via WebSocket
-      else if (currentStage == STAGE_FULL_SYSTEM && wsConnected) {
-        Serial.println("[FULL SYSTEM] Sending scan via WebSocket...");
+      // In full system mode, automatically send to API via HTTP
+  else if (currentStage == STAGE_FULL_SYSTEM && wifiConnected) {
+        Serial.println("[FULL SYSTEM] Sending scan via HTTP...");
+        
+        HTTPClient http;
+        String url = "http://" + String(API_HOST) + ":" + String(API_PORT) + "/api/rfid/scan";
+        
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-API-Key", apiKey);
+        
         JsonDocument doc;
-        doc["action"] = "scan";
         doc["tagId"] = tagId;
+        doc["deviceId"] = deviceId;
         doc["location"] = "Diagnostics Station";
         doc["timestamp"] = millis();
         
         String message;
         serializeJson(doc, message);
-        webSocket.sendTXT(message);
-        Serial.println("[WS] Scan sent: " + tagId);
+        
+        int httpCode = http.POST(message);
+        if (httpCode == 200 || httpCode == 201) {
+          Serial.println("[HTTP] Scan sent successfully: " + tagId);
+        } else {
+          Serial.printf("[HTTP] Scan failed: %d\n", httpCode);
+        }
+        http.end();
         
         drawStage(currentStage);
       }
@@ -1157,6 +1158,8 @@ bool testAPIHeartbeat() {
   apiRequestCount++;
   apiHeartbeats++;
   lastHeartbeatHttpCode = httpCode;
+  apiConnected = (httpCode >= 200 && httpCode < 300);
+  bool refreshNeeded = false;
   
   if (httpCode > 0) {
     String response = http.getString();
@@ -1170,13 +1173,77 @@ bool testAPIHeartbeat() {
       lastApiResponse = response;
       lastApiHttpCode = httpCode;
     }
+
+    JsonDocument doc;
+    DeserializationError jsonError = deserializeJson(doc, response);
+    if (!jsonError && doc["success"]) {
+      JsonObject data = doc["data"];
+      if (!data.isNull() && !data["device"].isNull()) {
+        JsonObject device = data["device"];
+
+        if (!device["registrationMode"].isNull()) {
+          bool reg = device["registrationMode"].as<bool>();
+          if (reg != registrationMode) {
+            Serial.printf("[REG] Heartbeat sync: registration %s\n", reg ? "ENABLED" : "DISABLED");
+            registrationMode = reg;
+            if (!registrationMode) {
+              expectedRegistrationTagId = "";
+              registrationModeStartTime = 0;
+            } else {
+              registrationModeStartTime = millis();
+            }
+            refreshNeeded = true;
+          }
+        }
+
+        if (!device["scanMode"].isNull()) {
+          bool scan = device["scanMode"].as<bool>();
+          if (scan != scanModeEnabled) {
+            Serial.printf("[SCAN MODE] Heartbeat sync: %s\n", scan ? "ENABLED" : "DISABLED");
+            scanModeEnabled = scan;
+            refreshNeeded = true;
+          }
+        }
+
+        if (!device["isActive"].isNull()) {
+          bool active = device["isActive"].as<bool>();
+          if (active != deviceActive) {
+            Serial.printf("[DEVICE] Heartbeat sync: device %s\n", active ? "ACTIVE" : "INACTIVE");
+            deviceActive = active;
+            refreshNeeded = true;
+          }
+        }
+
+        if (!device["pendingRegistrationTagId"].isNull()) {
+          String pending = device["pendingRegistrationTagId"].as<String>();
+          if (pending.length() > 0 && pending != expectedRegistrationTagId) {
+            expectedRegistrationTagId = pending;
+            Serial.printf("[REG] Heartbeat pending tag: %s\n", pending.c_str());
+            refreshNeeded = true;
+          }
+        }
+
+        if (!device["lastSeen"].isNull()) {
+          String seen = device["lastSeen"].as<String>();
+          if (seen != serverLastSeen) {
+            serverLastSeen = seen;
+            refreshNeeded = true;
+          }
+        }
+      }
+    }
   } else {
     String errorMsg = http.errorToString(httpCode);
     Serial.print("[API] Heartbeat error: ");
     Serial.println(errorMsg);
+    apiConnected = false;
   }
   
   http.end();
+  lastHeartbeatTime = millis();
+  if (refreshNeeded && (currentStage == STAGE_REGISTRATION_TEST || currentStage == STAGE_FULL_SYSTEM || currentStage == STAGE_API_TEST)) {
+    drawStage(currentStage);
+  }
   return (httpCode >= 200 && httpCode < 300);
 }
 
@@ -1342,9 +1409,9 @@ void initializePolling() {
     Serial.println("[POLL] WiFi not connected");
     return;
   }
-  pollingActive = true;
-  lastCommandPoll = 0; // Force immediate poll
-  Serial.println("[POLL] HTTP polling initialized");
+  Serial.println("[POLL] HTTP command poll triggered");
+  pollCommands();
+  testAPIHeartbeat();
 }
 
 void pollCommands() {
@@ -1371,8 +1438,54 @@ void pollCommands() {
     DeserializationError error = deserializeJson(doc, payload);
     
     if (!error && doc["success"]) {
-      JsonArray commands = doc["data"]["commands"];
-      
+      JsonObject data = doc["data"];
+      JsonArray commands = data["commands"];
+      bool refreshNeeded = false;
+
+      // Sync device state flags with server DB so diagnostics matches admin view
+      if (!data["deviceStatus"].isNull()) {
+        JsonObject status = data["deviceStatus"];
+
+        bool serverRegistration = status["registrationMode"].isNull()
+                                     ? registrationMode
+                                     : status["registrationMode"].as<bool>();
+        bool serverScanMode = status["scanMode"].isNull()
+                                   ? scanModeEnabled
+                                   : status["scanMode"].as<bool>();
+        bool serverActive = status["isActive"].isNull()
+                                  ? deviceActive
+                                  : status["isActive"].as<bool>();
+
+        if (serverRegistration != registrationMode) {
+          Serial.printf("[REG] Server registration flag = %s (was %s)\n",
+                        serverRegistration ? "true" : "false",
+                        registrationMode ? "true" : "false");
+          registrationMode = serverRegistration;
+          if (!registrationMode) {
+            expectedRegistrationTagId = "";
+            registrationModeStartTime = 0;
+          }
+          if (registrationMode) {
+            registrationModeStartTime = millis();
+          }
+          refreshNeeded = true;
+        }
+
+        if (serverScanMode != scanModeEnabled) {
+          Serial.printf("[SCAN MODE] Server scan mode = %s\n",
+                        serverScanMode ? "ENABLED" : "DISABLED");
+          scanModeEnabled = serverScanMode;
+          refreshNeeded = true;
+        }
+
+        if (serverActive != deviceActive) {
+          Serial.printf("[DEVICE] Server reports device %s\n",
+                        serverActive ? "ACTIVE" : "INACTIVE");
+          deviceActive = serverActive;
+          refreshNeeded = true;
+        }
+      }
+
       for (JsonObject cmd : commands) {
         String action = cmd["action"].as<String>();
         
@@ -1384,25 +1497,26 @@ void pollCommands() {
             registrationModeStartTime = millis();
             Serial.printf("[REG] Registration enabled for tag: %s\n", tagId.c_str());
             setFooterMessage(String("Reg mode: ") + expectedRegistrationTagId);
-            if (currentStage == STAGE_REGISTRATION_TEST || currentStage == STAGE_FULL_SYSTEM) {
-              drawStage(currentStage);
-            }
+            refreshNeeded = true;
           }
         } else if (action == "disable_registration") {
           registrationMode = false;
           expectedRegistrationTagId = "";
           Serial.println("[REG] Registration disabled by server");
           setFooterMessage(F("Reg mode OFF"));
-          if (currentStage == STAGE_REGISTRATION_TEST || currentStage == STAGE_FULL_SYSTEM) {
-            drawStage(currentStage);
-          }
+          refreshNeeded = true;
+        } else if (action == "scan_mode") {
+          bool enabled = cmd["enabled"].isNull() ? scanModeEnabled : cmd["enabled"].as<bool>();
+          scanModeEnabled = enabled;
+          Serial.printf("[SCAN MODE] Command sets scan mode %s\n", enabled ? "ENABLED" : "DISABLED");
+          refreshNeeded = true;
         }
       }
-      
-      // Refresh display if on command poll test stage
-      if (currentStage == STAGE_COMMAND_POLL_TEST) {
+
+      if (refreshNeeded && (currentStage == STAGE_REGISTRATION_TEST || currentStage == STAGE_FULL_SYSTEM)) {
         drawStage(currentStage);
       }
+      
     }
   } else {
     Serial.printf("[POLL] Failed to get commands - HTTP %d\n", httpCode);
@@ -1410,88 +1524,6 @@ void pollCommands() {
   
   http.end();
   lastCommandPoll = millis();
-}
-
-void toggleRegistrationMode() {
-  // Registration mode is now server-controlled via polling
-  // Just show current status
-  Serial.printf("[REG] Registration mode: %s\n", registrationMode ? "ENABLED" : "DISABLED");
-  if (registrationMode) {
-    Serial.printf("[REG] Expecting tag: %s\n", expectedRegistrationTagId.c_str());
-  }
-}
-
-void drawCommandPollTest() {
-  tft.fillScreen(TFT_BLACK);
-  
-  tft.setTextSize(2);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 30);
-  tft.println("Command Poll Test");
-  
-  tft.setTextSize(1);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 60);
-  tft.print("API: ");
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.println(API_BASE_URL);
-  
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 75);
-  tft.print("Device ID: ");
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.println(deviceMac);
-  
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 95);
-  tft.print("WiFi: ");
-  tft.setTextColor(wifiConnected ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  tft.println(wifiConnected ? "Connected" : "Disconnected");
-  
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 115);
-  tft.print("Polling: ");
-  tft.setTextColor(pollingActive ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  tft.println(pollingActive ? "ACTIVE" : "INACTIVE");
-  
-  if (pollingActive) {
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(LEFT_MARGIN, 135);
-    tft.print("Poll Count: ");
-    tft.setTextColor(TFT_CYAN, TFT_BLACK);
-    tft.println(commandPollCount);
-    
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(LEFT_MARGIN, 150);
-    tft.print("Last Poll: ");
-    tft.setTextColor(TFT_CYAN, TFT_BLACK);
-    unsigned long secondsAgo = (millis() - lastCommandPoll) / 1000;
-    tft.print(secondsAgo);
-    tft.println("s ago");
-    
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(LEFT_MARGIN, 165);
-    tft.print("Last HTTP: ");
-    if (lastCommandHttpCode == 200) {
-      tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    } else if (lastCommandHttpCode >= 400) {
-      tft.setTextColor(TFT_RED, TFT_BLACK);
-    } else {
-      tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-    }
-    tft.println(lastCommandHttpCode);
-  }
-  
-  tft.setTextSize(1);
-  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 195);
-  tft.println(pollingActive ? "Polling every 5s for commands" : "Press * to start polling");
-  
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 230);
-  tft.println("*: Toggle polling");
-  tft.setCursor(LEFT_MARGIN, 245);
-  tft.println("#: Back to menu");
 }
 
 void drawRegistrationTest() {
@@ -1505,19 +1537,131 @@ void drawRegistrationTest() {
   tft.setTextSize(1);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setCursor(LEFT_MARGIN, 60);
-  tft.print("API Polling: ");
-  tft.setTextColor(pollingActive ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  tft.println(pollingActive ? "Active" : "Inactive");
+  tft.print("WiFi: ");
+  tft.setTextColor(wifiConnected ? TFT_GREEN : TFT_RED, TFT_BLACK);
+  tft.println(wifiConnected ? "Connected" : "Disconnected");
   
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 80);
+  tft.setCursor(LEFT_MARGIN, 75);
+  tft.print("Poll Count: ");
+  if (commandPollCount > 0) {
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.println(commandPollCount);
+  } else {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.println("No polls yet");
+  }
+  
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 90);
+  tft.print("Last Poll: ");
+  if (commandPollCount > 0) {
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    unsigned long secondsAgo = (millis() - lastCommandPoll) / 1000;
+    tft.print(secondsAgo);
+    tft.println("s ago");
+  } else {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.println("N/A");
+  }
+  
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 105);
+  tft.print("Poll HTTP: ");
+  if (commandPollCount > 0) {
+    if (lastCommandHttpCode == 200) {
+      tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    } else if (lastCommandHttpCode >= 400) {
+      tft.setTextColor(TFT_RED, TFT_BLACK);
+    } else if (lastCommandHttpCode == 0) {
+      tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    } else {
+      tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+    }
+    tft.println(lastCommandHttpCode);
+  } else {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.println("N/A");
+  }
+  
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 120);
+  tft.print("Heartbeat Count: ");
+  if (apiHeartbeats > 0) {
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.println(apiHeartbeats);
+  } else {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.println("None");
+  }
+  
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 135);
+  tft.print("Heartbeat HTTP: ");
+  if (apiHeartbeats > 0) {
+    if (lastHeartbeatHttpCode >= 200 && lastHeartbeatHttpCode < 300) {
+      tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    } else if (lastHeartbeatHttpCode == 0) {
+      tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    } else if (lastHeartbeatHttpCode >= 400) {
+      tft.setTextColor(TFT_RED, TFT_BLACK);
+    } else {
+      tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+    }
+    tft.println(lastHeartbeatHttpCode);
+  } else {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.println("N/A");
+  }
+  
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 150);
+  tft.print("Last Heartbeat: ");
+  if (apiHeartbeats > 0 && lastHeartbeatTime > 0) {
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    unsigned long secondsAgo = (millis() - lastHeartbeatTime) / 1000;
+    tft.print(secondsAgo);
+    tft.println("s ago");
+  } else {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.println("N/A");
+  }
+  
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 165);
+  tft.print("Server Last Seen: ");
+  if (serverLastSeen.length() > 0) {
+    String truncated = serverLastSeen.substring(0, min(19, static_cast<int>(serverLastSeen.length())));
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.println(truncated);
+  } else {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.println("Unknown");
+  }
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 180);
+  tft.print("Device Active: ");
+  tft.setTextColor(deviceActive ? TFT_GREEN : TFT_RED, TFT_BLACK);
+  tft.println(deviceActive ? "Yes" : "No");
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 195);
+  tft.print("Scan Mode: ");
+  tft.setTextColor(scanModeEnabled ? TFT_ORANGE : TFT_CYAN, TFT_BLACK);
+  tft.println(scanModeEnabled ? "Enabled" : "Disabled");
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(LEFT_MARGIN, 210);
   tft.print("Registration Mode: ");
   tft.setTextColor(registrationMode ? TFT_GREEN : TFT_RED, TFT_BLACK);
   tft.println(registrationMode ? "ACTIVE" : "INACTIVE");
-  
+
+  int lastTagLabelY = registrationMode ? 255 : 225;
+
   if (registrationMode) {
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(LEFT_MARGIN, 100);
+    tft.setCursor(LEFT_MARGIN, 225);
     tft.print("Expected Tag: ");
     tft.setTextColor(TFT_YELLOW, TFT_BLACK);
     if (expectedRegistrationTagId.length() > 0) {
@@ -1526,45 +1670,46 @@ void drawRegistrationTest() {
       tft.setTextColor(TFT_ORANGE, TFT_BLACK);
       tft.println("Awaiting server...");
     }
-    
+
     unsigned long elapsed = (millis() - registrationModeStartTime) / 1000;
     unsigned long remaining = (REGISTRATION_MODE_TIMEOUT / 1000) - elapsed;
-    
+
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(LEFT_MARGIN, 120);
+    tft.setCursor(LEFT_MARGIN, 240);
     tft.print("Timeout in: ");
     tft.setTextColor(remaining < 30 ? TFT_ORANGE : TFT_CYAN, TFT_BLACK);
     tft.print(remaining);
     tft.println("s");
   }
-  
+
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 150);
+  tft.setCursor(LEFT_MARGIN, lastTagLabelY);
   tft.println("Last Tag Scanned:");
-  
+
   tft.setTextSize(2);
+  int tagValueY = lastTagLabelY + 20;
   if (lastRfidTag.length() > 0) {
     tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    tft.setCursor(LEFT_MARGIN, 170);
+    tft.setCursor(LEFT_MARGIN, tagValueY);
     tft.println(lastRfidTag);
   } else {
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.setCursor(LEFT_MARGIN, 170);
+    tft.setCursor(LEFT_MARGIN, tagValueY);
     tft.println("None");
   }
   
   tft.setTextSize(1);
   tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 210);
+  tft.setCursor(LEFT_MARGIN, 285);
   if (registrationMode) {
     tft.println("Scan the card to register...");
   } else {
-    tft.println("Enable registration mode in admin");
+    tft.println("Enable registration mode in admin, then poll");
   }
   
   tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.setCursor(LEFT_MARGIN, 245);
-  tft.println("*: Toggle registration mode");
-  tft.setCursor(LEFT_MARGIN, 260);
+  tft.setCursor(LEFT_MARGIN, 305);
+  tft.println("*: Poll commands + heartbeat");
+  tft.setCursor(LEFT_MARGIN, 320);
   tft.println("#: Back to menu");
 }

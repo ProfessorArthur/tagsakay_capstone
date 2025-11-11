@@ -1,5 +1,6 @@
 import api from "./api";
 import { ref } from "vue";
+import deviceService, { type Device } from "./device";
 
 export interface ScanStats {
   label: string;
@@ -9,9 +10,10 @@ export interface ScanStats {
 export interface DeviceStatus {
   id: string;
   name: string;
-  lastActive: string;
+  lastActive: string | null;
   status: "online" | "offline";
   location?: string;
+  lastSeenAgoSeconds?: number | null;
 }
 
 export interface RfidScanResult {
@@ -73,8 +75,28 @@ const rfidStatsService = {
    */
   async getConnectedDevices(): Promise<DeviceStatus[]> {
     try {
-      const response = await api.get("/devices/active");
-      return response.data;
+      const devices = await deviceService.getAllDevices();
+
+      const mappedDevices = devices.map(
+        (device: Device): DeviceStatus => ({
+          id: device.deviceId,
+          name: device.name,
+          status: device.status === "online" ? "online" : "offline",
+          lastActive: device.lastSeen ?? device.updatedAt ?? null,
+          location: device.location,
+          lastSeenAgoSeconds: device.lastSeenAgoSeconds ?? null,
+        })
+      );
+
+      return mappedDevices.sort((a, b) => {
+        if (a.status !== b.status) {
+          return a.status === "online" ? -1 : 1;
+        }
+
+        const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+        const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+        return bTime - aTime;
+      });
     } catch (error) {
       console.error("Error fetching connected RFID devices:", error);
       return []; // Return empty array if error occurs
@@ -140,7 +162,7 @@ const rfidStatsService = {
         await Promise.all([
           this.getWeeklyStats(),
           this.getRecentScans(100),
-          api.get("/devices"),
+          deviceService.getAllDevices(),
           api.get("/rfid"),
           api.get("/users"),
         ]);
@@ -154,10 +176,9 @@ const rfidStatsService = {
       ).length;
 
       // Calculate device statistics
-      const allDevices = devices.data || [];
-      const activeDevicesData = await this.getConnectedDevices();
-      const onlineDevices = activeDevicesData.filter(
-        (d) => d.status === "online"
+      const deviceList = devices;
+      const onlineDevices = deviceList.filter(
+        (device) => device.status === "online"
       ).length;
 
       // Calculate user statistics
@@ -173,9 +194,9 @@ const rfidStatsService = {
       return {
         todayScans,
         totalRegisteredCards: rfidCards.data?.length || 0,
-        totalDevices: allDevices.length,
+        totalDevices: deviceList.length,
         onlineDevices,
-        offlineDevices: allDevices.length - onlineDevices,
+        offlineDevices: deviceList.length - onlineDevices,
         totalUsers: allUsers.length,
         userStats,
         weeklyStats,

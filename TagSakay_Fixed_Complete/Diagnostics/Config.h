@@ -40,6 +40,16 @@
 #define COMMAND_POLL_INTERVAL 5000   // Poll every 5 seconds
 #define HEARTBEAT_INTERVAL 30000     // Heartbeat every 30 seconds
 
+// API Configuration (Update these values before flashing)
+#define API_HOST "api.tagsakay.com"         // Change to "api.tagsakay.com" for production
+#define API_PORT 443                // Change to 443 for production HTTPS
+#define USE_HTTPS true              // Set to true for production
+
+// Device Configuration (Set after device registration)
+// Get these values from the Device Registration page in admin panel
+const char* deviceId = "80F3DA4C46A4";           // MAC address without colons (e.g., "001122334455")
+const char* apiKey = "tsk_EWFS5d43StQY1TgFmusJ2aNPyWnjPcER";             // Device API key from registration
+
 // Registration Mode
 #define REGISTRATION_MODE_TIMEOUT 120000  // 2 minutes
 
