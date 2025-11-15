@@ -62,6 +62,7 @@ export const rfids = pgTable("Rfids", {
   tagId: varchar("tagId", { length: 255 }).notNull().unique(),
   userId: integer("userId").references(() => users.id),
   isActive: boolean("isActive").default(true),
+  unitNumber: varchar("unitNumber", { length: 255 }),
   lastScanned: timestamp("lastScanned"),
   deviceId: varchar("deviceId", { length: 255 }).references(
     () => devices.deviceId,

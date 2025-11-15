@@ -14,6 +14,7 @@ interface Rfid {
   userId: number | null;
   user?: RfidUserSummary | null;
   isActive: boolean;
+  unitNumber?: string | null;
   lastScanned: string | null;
   lastSeen?: string | null;
   deviceId: string | null;
@@ -46,9 +47,29 @@ interface UnregisteredRfidScan {
   scanCount: number;
 }
 
+interface RecentScanCheckResult {
+  success: boolean;
+  found: boolean;
+  scan: {
+    id: string;
+    deviceId: string | null;
+    status: string;
+    scanTime: string;
+    metadata: Record<string, any>;
+    tagId?: string;
+  } | null;
+}
+
 interface RegisterRfidData {
   tagId: string;
   userId?: number;
+  metadata?: Record<string, any>;
+  isActive?: boolean;
+}
+
+interface UpdateRfidData {
+  userId?: number | null;
+  isActive?: boolean;
   metadata?: Record<string, any>;
 }
 
@@ -105,6 +126,29 @@ const rfidService = {
   },
 
   /**
+   * Update existing RFID tag details
+   */
+  async updateRfid(tagId: string, data: UpdateRfidData): Promise<Rfid> {
+    if (!tagId) {
+      throw new Error("Tag ID is required");
+    }
+
+    try {
+      const response = await apiClient.put(`/rfid/${tagId}`, data);
+      return response.data?.rfid ?? response.data;
+    } catch (error: any) {
+      if (error.response?.status === 400 || error.response?.status === 404) {
+        const apiResponse = error.response.data as ApiResponse;
+        const message = apiResponse.message || apiResponse.errors?.join(", ");
+        if (message) {
+          throw new Error(message);
+        }
+      }
+      throw new Error(error.message || "Failed to update RFID tag");
+    }
+  },
+
+  /**
    * Get RFID tag information
    */
   async getRfidInfo(id: string): Promise<Rfid> {
@@ -120,11 +164,23 @@ const rfidService = {
    * Update RFID tag status (activate/deactivate)
    */
   async updateRfidStatus(id: string, isActive: boolean): Promise<Rfid> {
+    // Delegate to updateRfid which uses PUT /rfid/:tagId
+    return await this.updateRfid(id, { isActive });
+  },
+
+  /**
+   * Delete RFID tag (superadmin only)
+   */
+  async deleteRfid(tagId: string): Promise<void> {
+    if (!tagId) {
+      throw new Error("Tag ID is required");
+    }
+
     try {
-      const response = await apiClient.put(`/rfid/${id}/status`, { isActive });
-      return response.data;
+      await apiClient.delete(`/rfid/${tagId}`);
     } catch (error: any) {
-      throw new Error(error.message || "Failed to update RFID status");
+      const message = error.response?.data?.message || error.message;
+      throw new Error(message || "Failed to delete RFID tag");
     }
   },
 
@@ -172,13 +228,30 @@ const rfidService = {
         ? payload
         : [];
 
-      return rfids.map((raw: any) => ({
-        ...raw,
-        tagId: typeof raw?.tagId === "string" ? raw.tagId.toUpperCase() : "",
-        isRegistered: Boolean(raw?.user?.id),
-        lastSeen: raw?.lastScanned ?? raw?.updatedAt ?? null,
-        metadata: raw?.metadata ?? {},
-      }));
+      return rfids.map((raw: any) => {
+        const hasUser = raw?.userId !== null && raw?.userId !== undefined;
+        const hasRegistrar =
+          raw?.registeredBy !== null && raw?.registeredBy !== undefined;
+
+        // Normalize unitNumber in metadata for UI consumption
+        const unitNumber = raw?.unitNumber ?? raw?.metadata?.unitNumber ?? "";
+        const normalizedMetadata = {
+          ...(raw?.metadata ?? {}),
+          unitNumber,
+        };
+
+        return {
+          ...raw,
+          tagId: typeof raw?.tagId === "string" ? raw.tagId.toUpperCase() : "",
+          isRegistered:
+            raw?.isRegistered !== undefined
+              ? Boolean(raw.isRegistered)
+              : hasUser || hasRegistrar,
+          lastSeen: raw?.lastScanned ?? raw?.updatedAt ?? null,
+          metadata: normalizedMetadata,
+          unitNumber,
+        };
+      });
     } catch (error: any) {
       console.error("Failed to fetch all RFID cards:", error);
       return [];
@@ -188,7 +261,7 @@ const rfidService = {
   /**
    * Check if a tag was recently scanned
    */
-  async checkRecentScan(tagId: string): Promise<any> {
+  async checkRecentScan(tagId: string): Promise<RecentScanCheckResult> {
     const validation = validateRfidTag(tagId);
     if (!validation.valid) {
       throw new Error(validation.error);
@@ -196,7 +269,12 @@ const rfidService = {
 
     try {
       const response = await apiClient.get(`/rfid/check-recent-scan/${tagId}`);
-      return response.data;
+      const payload = response.data;
+      return {
+        success: true,
+        found: Boolean(payload?.found),
+        scan: payload?.scan ?? null,
+      };
     } catch (error: any) {
       throw new Error(error.message || "Failed to check recent scan");
     }
@@ -233,4 +311,11 @@ const rfidService = {
 };
 
 export default rfidService;
-export type { Rfid, RfidScan, UnregisteredRfidScan, RegisterRfidData };
+export type {
+  Rfid,
+  RfidScan,
+  UnregisteredRfidScan,
+  RegisterRfidData,
+  UpdateRfidData,
+  RecentScanCheckResult,
+};

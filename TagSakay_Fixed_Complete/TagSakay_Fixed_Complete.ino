@@ -71,6 +71,7 @@ unsigned long lastRegistrationCheck = 0;
 unsigned long registrationModeStartTime = 0;
 unsigned long lastHeartbeat = 0;
 unsigned long lastScanTime = 0;
+unsigned long lastCommandPoll = 0;
 
 // Registration mode keypad buffer (renamed to avoid conflict with KeypadModule.cpp)
 String registrationKeypadBuffer = "";
@@ -95,6 +96,7 @@ void handleSystemError(const char* component, const char* error);
 void handleRFIDScanning();
 void handleKeypadInputNew();
 void sendPeriodicHeartbeat();
+void pollCommandsIfDue();
 void checkNetworkConnection();
 void checkSerialCommands();
 
@@ -339,6 +341,9 @@ void loop(void) {
   
   // Send heartbeat
   sendPeriodicHeartbeat();
+
+  // Poll server commands
+  pollCommandsIfDue();
   
   // Clear registration keypad buffer if timeout reached (prevents accidental commands)
   if (registrationKeypadBuffer.length() > 0 && (currentMillis - lastRegistrationKeypadInput > KEYPAD_BUFFER_TIMEOUT)) {
@@ -625,7 +630,7 @@ void handleKeypadInputNew() {
 void sendPeriodicHeartbeat() {
   unsigned long currentMillis = millis();
   
-  if (currentMillis - lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
+  if (currentMillis - lastHeartbeat >= HEARTBEAT_INTERVAL) {
     lastHeartbeat = currentMillis;
     
     if (!offlineMode && networkModule.isConnected()) {
@@ -648,6 +653,23 @@ void sendPeriodicHeartbeat() {
     String wifiStatus = networkModule.isConnected() ? "Connected" : "Disconnected";
     String deviceDisplay = deviceId.length() >= 4 ? deviceId.substring(deviceId.length() - 4) : deviceId;
     updateConnectionStatus(wifiStatus, "Synced", deviceDisplay);
+  }
+}
+
+void pollCommandsIfDue() {
+  unsigned long now = millis();
+  if (now - lastCommandPoll < COMMAND_POLL_INTERVAL) return;
+  lastCommandPoll = now;
+
+  if (offlineMode || !networkModule.isConnected() || !apiModule.isInitialized()) {
+    return;
+  }
+
+  // Prefer HTTP polling even if WebSocket is connected, as backend is HTTP-centric
+  bool ok = networkModule.pollServerCommands();
+  if (!ok) {
+    // Non-fatal; just log
+    Serial.println("[POLL] No updates or failed to poll commands");
   }
 }
 

@@ -77,4 +77,7 @@ void checkRegistrationModeFromServer();
 bool updateDeviceMode(bool registrationModeEnabled, bool scanModeEnabled, const String& pendingTagId = "");
 bool syncDeviceProfile();
 
+// Command polling (HTTP-based control plane)
+bool pollServerCommands();
+
 #endif // NETWORK_MODULE_H

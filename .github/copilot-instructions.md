@@ -187,10 +187,12 @@ res.status(429).json({
 
 1. Update schema in `backend-workers/src/db/schema.ts`
 2. Generate migration: `npm run db:generate`
-3. Apply migration: `npm run db:migrate`
-4. Create/update routes in `backend-workers/src/routes/`
-5. Test with `npm run dev`
-6. For auth/session changes, verify cookies with integration tests or `npm run test:api login`
+3. Register migration tag in `drizzle/meta/_journal.json` (or run `npm run db:sync-migrations`)
+4. Apply migration: `npm run db:migrate`
+5. Create/update routes in `backend-workers/src/routes/`
+6. Test with `npm run dev`
+7. For auth/session changes, verify cookies with integration tests or `npm run test:api login`
+8. Log any notable errors or incidents in `backend-workers/markdowns/Error Logging.md`
 
 ### Frontend Service Integration
 

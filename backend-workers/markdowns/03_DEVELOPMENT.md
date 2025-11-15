@@ -28,6 +28,13 @@ npm run seed            # Add test data
 npm run db:reset        # Reset & reseed database
 ```
 
+> ⚙️ **Migration Checklist:** Whenever you add a new `.sql` file under `drizzle/`, make sure the same tag exists in `drizzle/meta/_journal.json` before running `npm run migrate`. Drizzle only applies migrations that appear in this journal. Recommended sequence:
+>
+> 1. Create the new `000X_your_migration.sql` file.
+> 2. Append the migration entry in `_journal.json` (or simply run `npm run db:sync-migrations` to generate it).
+> 3. Run `npm run db:sync-migrations` so the `_drizzle_migrations` table is aware of the new tag.
+> 4. Execute `npm run migrate` against the target database.
+
 ### Git Workflow
 
 ```bash

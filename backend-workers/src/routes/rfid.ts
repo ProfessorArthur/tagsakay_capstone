@@ -77,6 +77,25 @@ const fetchUnregisteredTags = async (db: Database, limit: number) => {
     }
   });
 
+  if (uniqueTags.size > 0) {
+    const tagIds = Array.from(uniqueTags.keys());
+    const registeredTags = await Promise.all(
+      tagIds.map(async (tagId) => {
+        const [exists] = await db
+          .select({ id: rfids.id })
+          .from(rfids)
+          .where(sql`${rfids.tagId} ILIKE ${tagId}`)
+          .limit(1);
+
+        return exists ? tagId : null;
+      })
+    );
+
+    registeredTags
+      .filter((tagId): tagId is string => Boolean(tagId))
+      .forEach((tagId) => uniqueTags.delete(tagId));
+  }
+
   const unregisteredTags = Array.from(uniqueTags.values());
 
   return {
@@ -278,9 +297,13 @@ app.get("/", authMiddleware, requireRole("admin", "superadmin"), async (c) => {
       .select({
         id: rfids.id,
         tagId: rfids.tagId,
+        userId: rfids.userId,
         isActive: rfids.isActive,
+        unitNumber: rfids.unitNumber,
         lastScanned: rfids.lastScanned,
         deviceId: rfids.deviceId,
+        registeredBy: rfids.registeredBy,
+        metadata: rfids.metadata,
         createdAt: rfids.createdAt,
         updatedAt: rfids.updatedAt,
         user: {
@@ -337,6 +360,7 @@ app.get("/:tagId", authMiddleware, async (c) => {
         id: rfids.id,
         tagId: rfids.tagId,
         isActive: rfids.isActive,
+        unitNumber: rfids.unitNumber,
         lastScanned: rfids.lastScanned,
         deviceId: rfids.deviceId,
         metadata: rfids.metadata,
@@ -411,6 +435,7 @@ app.post(
         userId,
         isActive = true,
         metadata = {},
+        unitNumber,
       } = await c.req.json();
 
       const normalizedTagId = normalizeTagId(tagId);
@@ -470,6 +495,8 @@ app.post(
           isActive,
           registeredBy: user.id,
           metadata,
+          unitNumber:
+            unitNumber ?? (metadata?.unitNumber as string | undefined) ?? null,
         })
         .returning();
 
@@ -500,6 +527,83 @@ app.post(
   }
 );
 
+// GET /api/rfid/check-recent-scan/:tagId - Verify a tag was scanned recently during registration
+app.get(
+  "/check-recent-scan/:tagId",
+  authMiddleware,
+  requireRole("admin", "superadmin"),
+  async (c) => {
+    try {
+      const db = c.get("db");
+      const tagIdParam = c.req.param("tagId");
+      const normalizedTagId = normalizeTagId(tagIdParam);
+
+      if (!normalizedTagId) {
+        return c.json(
+          {
+            success: false,
+            message: "Invalid RFID tag ID",
+          },
+          400
+        );
+      }
+
+      const lookbackWindowMs = 2 * 60 * 1000; // two minutes
+      const since = new Date(Date.now() - lookbackWindowMs);
+
+      const [recentScan] = await db
+        .select({
+          id: rfidScans.id,
+          deviceId: rfidScans.deviceId,
+          status: rfidScans.status,
+          scanTime: rfidScans.scanTime,
+          metadata: rfidScans.metadata,
+        })
+        .from(rfidScans)
+        .where(
+          and(
+            eq(rfidScans.status, "failed"),
+            sql`${rfidScans.rfidTagId} ILIKE ${normalizedTagId}`,
+            sql`${rfidScans.scanTime} >= ${since}`
+          )
+        )
+        .orderBy(desc(rfidScans.scanTime))
+        .limit(1);
+
+      if (!recentScan) {
+        return c.json({
+          success: true,
+          data: {
+            found: false,
+            scan: null,
+          },
+        });
+      }
+
+      return c.json({
+        success: true,
+        data: {
+          found: true,
+          scan: {
+            ...recentScan,
+            tagId: normalizedTagId,
+          },
+        },
+      });
+    } catch (error: any) {
+      console.error("Check recent scan error:", error);
+      return c.json(
+        {
+          success: false,
+          message: "Failed to verify recent scan",
+          error: error.message,
+        },
+        500
+      );
+    }
+  }
+);
+
 // PUT /api/rfid/:tagId - Update RFID tag (admin/superadmin only)
 app.put(
   "/:tagId",
@@ -510,7 +614,16 @@ app.put(
       const db = c.get("db");
       const tagIdParam = c.req.param("tagId");
       const normalizedTagId = normalizeTagId(tagIdParam);
-      const { userId, isActive, metadata } = await c.req.json();
+      const body = await c.req.json();
+      const { userId, isActive, metadata, unitNumber } = body as {
+        userId?: number | null;
+        isActive?: boolean;
+        metadata?: Record<string, any>;
+        unitNumber?: string | null;
+      };
+      const unitNumberFromBody = unitNumber as string | undefined;
+      const unitNumberFromMetadata =
+        (metadata?.unitNumber as string | undefined) ?? undefined;
 
       if (!normalizedTagId) {
         return c.json(
@@ -568,6 +681,10 @@ app.put(
       if (userId !== undefined) updateData.userId = userId;
       if (isActive !== undefined) updateData.isActive = isActive;
       if (metadata !== undefined) updateData.metadata = metadata;
+      if (unitNumberFromBody !== undefined)
+        updateData.unitNumber = unitNumberFromBody || null;
+      else if (unitNumberFromMetadata !== undefined)
+        updateData.unitNumber = unitNumberFromMetadata || null;
 
       // Update RFID
       const [updatedRfid] = await db

@@ -4,9 +4,11 @@ import rfidService, {
   type Rfid,
   type RegisterRfidData,
   type UnregisteredRfidScan,
+  type UpdateRfidData,
 } from "../services/rfid";
 import userService, { type User } from "../services/user";
 import deviceService from "../services/device";
+import authService from "../services/auth";
 
 // State
 const rfidCards = ref<Rfid[]>([]);
@@ -17,19 +19,35 @@ const success = ref("");
 const tab = ref("all"); // 'all', 'registered', 'unregistered'
 const activeDevices = ref<any[]>([]);
 
+const isSuperAdmin = computed(() => authService.isSuperAdmin());
+
 // Modal state
 const showRegisterModal = ref(false);
 const selectedCard = ref<Rfid | null>(null);
 const awaitingConfirmation = ref(false);
 const pendingRegistration = ref<string | null>(null);
 
+// Search, sort, and filter state
+const searchQuery = ref("");
+const sortAsc = ref(true); // true = A-Z, false = Z-A
+const statusFilter = ref<"all" | "active" | "inactive">("all");
+const userFilter = ref<number | "all">("all");
+
+const isEditMode = computed(
+  () => !!selectedCard.value && selectedCard.value.isRegistered
+);
+
 // Form data for registering/editing
-const formData = ref<RegisterRfidData & { metadata: { notes: string } }>({
+const formData = ref<
+  RegisterRfidData & { metadata: { notes: string; unitNumber?: string } }
+>({
   tagId: "",
   userId: undefined,
   metadata: {
     notes: "",
+    unitNumber: "",
   },
+  isActive: true,
 });
 
 // Computed properties for filtering cards
@@ -42,9 +60,48 @@ const unregisteredCards = computed(() =>
 );
 
 const displayedCards = computed(() => {
-  if (tab.value === "registered") return registeredCards.value;
-  if (tab.value === "unregistered") return unregisteredCards.value;
-  return rfidCards.value;
+  // Base list by tab selection
+  let baseList: Rfid[] = [];
+  if (tab.value === "registered") baseList = registeredCards.value;
+  else if (tab.value === "unregistered") baseList = unregisteredCards.value;
+  else baseList = rfidCards.value;
+
+  // Apply status filter (only meaningful for registered cards)
+  let filtered = baseList.filter((card) => {
+    if (statusFilter.value === "active") return card.isActive === true;
+    if (statusFilter.value === "inactive") return card.isActive === false;
+    return true; // 'all'
+  });
+
+  // Apply user filter
+  if (userFilter.value !== "all") {
+    filtered = filtered.filter(
+      (card) => (card.user?.id ?? null) === userFilter.value
+    );
+  }
+
+  // Apply search filter on tagId and user name/email
+  const q = searchQuery.value.trim().toLowerCase();
+  if (q) {
+    filtered = filtered.filter((card) => {
+      const tagMatch = (card.tagId || "").toLowerCase().includes(q);
+      const userName = card.user?.name?.toLowerCase?.() || "";
+      const userEmail = (card as any).user?.email?.toLowerCase?.() || "";
+      const userMatch = userName.includes(q) || userEmail.includes(q);
+      return tagMatch || userMatch;
+    });
+  }
+
+  // Sort by tagId A-Z or Z-A
+  const sorted = [...filtered].sort((a, b) => {
+    const ta = (a.tagId || "").toUpperCase();
+    const tb = (b.tagId || "").toUpperCase();
+    if (ta < tb) return sortAsc.value ? -1 : 1;
+    if (ta > tb) return sortAsc.value ? 1 : -1;
+    return 0;
+  });
+
+  return sorted;
 });
 
 // Variable to store the scan check interval
@@ -154,14 +211,22 @@ const loadUsers = async () => {
 // Open modal to register an unregistered card
 const openRegisterModal = async (card: any = null) => {
   selectedCard.value = card;
+  pendingRegistration.value = null;
+  awaitingConfirmation.value = false;
+  stopPollingForNewTag();
 
   if (card) {
     formData.value = {
       tagId: card.tagId,
       userId: card.user?.id || undefined,
       metadata: {
+        ...(typeof card.metadata === "object" && card.metadata !== null
+          ? card.metadata
+          : {}),
         notes: card.metadata?.notes || "",
+        unitNumber: card.metadata?.unitNumber || "",
       },
+      isActive: card.isActive ?? true,
     };
     showRegisterModal.value = true;
   } else {
@@ -171,7 +236,9 @@ const openRegisterModal = async (card: any = null) => {
       userId: undefined,
       metadata: {
         notes: "",
+        unitNumber: "",
       },
+      isActive: true,
     };
 
     // Show the modal with scanning state
@@ -311,9 +378,9 @@ const checkForNewScans = async () => {
     );
 
     // If a recent scan was found, complete the registration
-    if (response.success && response.found) {
+    if (response.found) {
       // It's a confirmation tap - complete the registration
-      await registerRfid();
+      await completeRegistration();
       awaitingConfirmation.value = false;
       pendingRegistration.value = null;
       success.value = "RFID card confirmed and registered successfully!";
@@ -328,20 +395,28 @@ const checkForNewScans = async () => {
 
 // Start the registration process for an unregistered card
 const startRegistration = async (card: Rfid) => {
-  // Store the card we're registering
   selectedCard.value = card;
   pendingRegistration.value = card.tagId;
+  awaitingConfirmation.value = false;
 
-  // Set up the form data
+  stopPollingForNewTag();
+
+  const existingMetadata =
+    typeof card.metadata === "object" && card.metadata !== null
+      ? { ...card.metadata }
+      : {};
+
   formData.value = {
     tagId: card.tagId,
-    userId: undefined,
+    userId: card.user?.id || undefined,
     metadata: {
-      notes: "",
+      ...existingMetadata,
+      notes: existingMetadata?.notes || "",
+      unitNumber: existingMetadata?.unitNumber || "",
     },
+    isActive: card.isActive ?? true,
   };
 
-  // Find online devices to notify about registration mode
   if (activeDevices.value.length > 0) {
     const onlineDevices = activeDevices.value.filter(
       (device) => device.status === "online"
@@ -349,12 +424,8 @@ const startRegistration = async (card: Rfid) => {
 
     if (onlineDevices.length > 0) {
       try {
-        // Notify the first online device to go into registration mode
-        // In a more complex system, you might want to select a specific device or notify multiple devices
         const deviceId = onlineDevices[0].id;
-
         await deviceService.enableRegistrationMode(deviceId, card.tagId);
-
         console.log(
           `Notified device ${deviceId} to enter registration mode for tag ${card.tagId}`
         );
@@ -364,22 +435,60 @@ const startRegistration = async (card: Rfid) => {
     }
   }
 
-  // Open the registration modal
+  success.value = "";
+  error.value = "";
   showRegisterModal.value = true;
+};
+
+const openEditCard = (card: Rfid) => {
+  selectedCard.value = card;
+  pendingRegistration.value = null;
+  awaitingConfirmation.value = false;
+  stopPollingForNewTag();
+
+  const existingMetadata =
+    typeof card.metadata === "object" && card.metadata !== null
+      ? { ...card.metadata }
+      : {};
+
+  formData.value = {
+    tagId: card.tagId,
+    userId: card.user?.id || undefined,
+    metadata: {
+      ...existingMetadata,
+      notes: existingMetadata?.notes || "",
+    },
+    isActive: card.isActive ?? true,
+  };
+
+  success.value = "";
+  error.value = "";
+  showRegisterModal.value = true;
+};
+
+const buildMetadataPayload = () => {
+  const metadataValue = formData.value.metadata;
+  const baseMetadata =
+    typeof metadataValue === "object" && metadataValue !== null
+      ? metadataValue
+      : { notes: "", unitNumber: "" };
+
+  return {
+    ...baseMetadata,
+    notes: metadataValue?.notes || "",
+    unitNumber: metadataValue?.unitNumber || "",
+  };
 };
 
 // Prepare for confirmation tap
 const prepareForConfirmation = async () => {
-  // Validate form before proceeding
   if (!formData.value.tagId) {
     error.value = "Tag ID is required";
     return;
   }
 
-  // Set awaiting confirmation state
   awaitingConfirmation.value = true;
 
-  // Find online devices to notify about registration mode
   if (activeDevices.value.length > 0) {
     const onlineDevices = activeDevices.value.filter(
       (device) => device.status === "online"
@@ -387,7 +496,6 @@ const prepareForConfirmation = async () => {
 
     if (onlineDevices.length > 0) {
       try {
-        // Notify the first online device to go into registration mode
         const deviceId = onlineDevices[0].id;
 
         await deviceService.setRegistrationMode({
@@ -405,20 +513,27 @@ const prepareForConfirmation = async () => {
     }
   }
 
-  // Show instructions to the user
   success.value = `Form data saved! Please tap the RFID card "${pendingRegistration.value}" again to confirm and complete registration.`;
 };
 
-// Register or update an RFID card
-const registerRfid = async () => {
+const completeRegistration = async () => {
   try {
-    await rfidService.registerRfid(formData.value);
+    const payload: RegisterRfidData = {
+      tagId: formData.value.tagId,
+      userId:
+        formData.value.userId !== undefined ? formData.value.userId : undefined,
+      metadata: buildMetadataPayload(),
+      isActive: formData.value.isActive,
+    };
+
+    await rfidService.registerRfid(payload);
     showRegisterModal.value = false;
     awaitingConfirmation.value = false;
     pendingRegistration.value = null;
+    selectedCard.value = null;
     success.value = "RFID card registered successfully";
+    stopPollingForNewTag();
 
-    // Turn off registration mode on devices
     if (activeDevices.value.length > 0) {
       const onlineDevices = activeDevices.value.filter(
         (device) => device.status === "online"
@@ -426,7 +541,6 @@ const registerRfid = async () => {
 
       if (onlineDevices.length > 0) {
         try {
-          // Disable registration mode on the first online device
           const deviceId = onlineDevices[0].id;
 
           await deviceService.setRegistrationMode({
@@ -444,14 +558,81 @@ const registerRfid = async () => {
     await loadRfidCards();
   } catch (err) {
     console.error("Error registering RFID card:", err);
-    error.value = "Failed to register RFID card";
+    error.value =
+      err instanceof Error ? err.message : "Failed to register RFID card";
+  }
+};
+
+const saveCardChanges = async () => {
+  if (!selectedCard.value) {
+    return;
+  }
+
+  try {
+    const payload: UpdateRfidData = {
+      userId:
+        formData.value.userId === undefined ? null : formData.value.userId,
+      isActive: formData.value.isActive,
+      metadata: buildMetadataPayload(),
+    };
+
+    await rfidService.updateRfid(selectedCard.value.tagId, payload);
+    success.value = `RFID card ${selectedCard.value.tagId} updated successfully`;
+    showRegisterModal.value = false;
+    selectedCard.value = null;
+    await loadRfidCards();
+  } catch (err) {
+    console.error("Error updating RFID card:", err);
+    error.value =
+      err instanceof Error ? err.message : "Failed to update RFID card";
+  }
+};
+
+const handleFormSubmit = async () => {
+  if (isEditMode.value) {
+    await saveCardChanges();
+    return;
+  }
+
+  if (awaitingConfirmation.value) {
+    await completeRegistration();
+    return;
+  }
+
+  await prepareForConfirmation();
+};
+
+const deleteCard = async (card: Rfid) => {
+  if (!isSuperAdmin.value) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete card ${card.tagId}? This action cannot be undone.`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await rfidService.deleteRfid(card.tagId);
+    success.value = `Card ${card.tagId} deleted successfully`;
+    if (selectedCard.value?.tagId === card.tagId) {
+      selectedCard.value = null;
+    }
+    await loadRfidCards();
+  } catch (err) {
+    console.error("Error deleting RFID card:", err);
+    error.value =
+      err instanceof Error ? err.message : "Failed to delete RFID card";
   }
 };
 
 // Toggle RFID card active status
 const toggleCardStatus = async (card: Rfid) => {
   try {
-    await rfidService.updateRfidStatus(card.id, !card.isActive);
+    await rfidService.updateRfid(card.tagId, { isActive: !card.isActive });
     success.value = `Card ${card.tagId} ${
       card.isActive ? "deactivated" : "activated"
     } successfully`;
@@ -509,11 +690,53 @@ const formatDate = (dateString: string | null | undefined) => {
     </div>
 
     <!-- Action buttons -->
-    <div class="flex justify-between mb-4">
-      <div>
-        <span class="text-sm"> {{ displayedCards.length }} cards found </span>
+    <div
+      class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4"
+    >
+      <div class="flex-1 flex flex-col md:flex-row md:items-center gap-2">
+        <div class="form-control w-full md:w-64">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search by Tag ID or User..."
+            class="input input-sm input-bordered w-full"
+          />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            class="btn btn-sm"
+            :aria-label="sortAsc ? 'Sort Z-A' : 'Sort A-Z'"
+            @click="sortAsc = !sortAsc"
+            title="Toggle sort order"
+          >
+            <span v-if="sortAsc">A–Z ▲</span>
+            <span v-else>Z–A ▼</span>
+          </button>
+
+          <select
+            v-model="statusFilter"
+            class="select select-sm select-bordered"
+          >
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+
+          <select v-model="userFilter" class="select select-sm select-bordered">
+            <option value="all">All Users</option>
+            <option v-for="u in users" :key="u.id" :value="u.id">
+              {{ u.name }} ({{ u.email }})
+            </option>
+          </select>
+        </div>
+
+        <span class="text-sm opacity-80"
+          >{{ displayedCards.length }} cards</span
+        >
       </div>
-      <div class="flex space-x-2">
+
+      <div class="flex items-center gap-2">
         <button @click="loadRfidCards" class="btn btn-sm">Refresh</button>
         <button @click="openRegisterModal()" class="btn btn-sm btn-primary">
           Register New Card
@@ -532,6 +755,7 @@ const formatDate = (dateString: string | null | undefined) => {
         <thead>
           <tr>
             <th>Tag ID</th>
+            <th>Unit No.</th>
             <th>Status</th>
             <th>User</th>
             <th>Last Seen</th>
@@ -545,6 +769,7 @@ const formatDate = (dateString: string | null | undefined) => {
             :class="{ 'opacity-50': card.isRegistered && !card.isActive }"
           >
             <td>{{ card.tagId }}</td>
+            <td>{{ (card as any).metadata?.unitNumber || "-" }}</td>
             <td>
               <div v-if="card.isRegistered">
                 <span
@@ -591,11 +816,20 @@ const formatDate = (dateString: string | null | undefined) => {
 
                 <!-- Edit registered card -->
                 <button
-                  v-if="card.isRegistered"
-                  @click="openRegisterModal(card)"
+                  v-if="isSuperAdmin && card.isRegistered"
+                  @click="openEditCard(card)"
                   class="btn btn-sm btn-info"
                 >
                   Edit
+                </button>
+
+                <!-- Delete card -->
+                <button
+                  v-if="isSuperAdmin"
+                  @click="deleteCard(card)"
+                  class="btn btn-sm btn-error"
+                >
+                  Delete
                 </button>
               </div>
             </td>
@@ -618,7 +852,9 @@ const formatDate = (dateString: string | null | undefined) => {
       <div class="modal-box">
         <h3 class="font-bold text-lg">
           {{
-            pendingRegistration === "new"
+            isEditMode
+              ? "Edit RFID Card"
+              : pendingRegistration === "new"
               ? "Scan New RFID Card"
               : selectedCard
               ? "Register RFID Card"
@@ -659,13 +895,12 @@ const formatDate = (dateString: string | null | undefined) => {
         <!-- Registration form -->
         <form
           v-if="
+            isEditMode ||
             !pendingRegistration ||
             pendingRegistration !== 'new' ||
             !awaitingConfirmation
           "
-          @submit.prevent="
-            awaitingConfirmation ? registerRfid() : prepareForConfirmation()
-          "
+          @submit.prevent="handleFormSubmit"
           class="mt-4 space-y-4"
         >
           <div class="form-control">
@@ -684,6 +919,18 @@ const formatDate = (dateString: string | null | undefined) => {
 
           <div class="form-control">
             <label class="label">
+              <span class="label-text">Unit Number</span>
+            </label>
+            <input
+              v-model="formData.metadata.unitNumber"
+              type="text"
+              placeholder="e.g., TR-0123"
+              class="input input-bordered"
+            />
+          </div>
+
+          <div class="form-control">
+            <label class="label">
               <span class="label-text">Assign to User (Optional)</span>
             </label>
             <select v-model="formData.userId" class="select select-bordered">
@@ -692,6 +939,17 @@ const formatDate = (dateString: string | null | undefined) => {
                 {{ user.name }} ({{ user.email }})
               </option>
             </select>
+          </div>
+
+          <div v-if="isEditMode" class="form-control">
+            <label class="label cursor-pointer">
+              <span class="label-text">Card Active</span>
+              <input
+                type="checkbox"
+                class="toggle toggle-success"
+                v-model="formData.isActive"
+              />
+            </label>
           </div>
 
           <div class="form-control">
@@ -715,7 +973,9 @@ const formatDate = (dateString: string | null | undefined) => {
             </button>
             <button type="submit" class="btn btn-primary">
               {{
-                awaitingConfirmation
+                isEditMode
+                  ? "Save Changes"
+                  : awaitingConfirmation
                   ? "Complete Registration"
                   : "Continue & Wait for Tap"
               }}

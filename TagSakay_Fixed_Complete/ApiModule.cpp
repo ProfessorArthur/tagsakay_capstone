@@ -245,6 +245,12 @@ ApiResponse ApiModule::sendHeartbeat(bool includeStats) {
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["location"] = deviceConfig.location;
   doc["firmwareVersion"] = FIRMWARE_VERSION;
+  // Sync key device flags so server UI reflects current state without waiting for poll
+  doc["registrationMode"] = registrationMode;
+  doc["scanMode"] = deviceConfig.scanMode;
+  if (expectedRegistrationTagId.length() > 0) {
+    doc["pendingRegistrationTagId"] = expectedRegistrationTagId;
+  }
   
   if (includeStats) {
     JsonObject stats = doc.createNestedObject("stats");

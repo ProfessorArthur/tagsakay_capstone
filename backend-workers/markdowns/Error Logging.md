@@ -81,3 +81,10 @@ Date of Fix: 2025-11-12
 Details: Axios interceptor already unwraps the `{ success, data }` envelope, but `userService.getUsers()` still expected a nested `response.data` object, returning `undefined`. Normalized the service to output an array and updated consuming views (`UserManagement.vue`, `RfidCardManagement.vue`, dashboard stats) to read the shared `User` type, restoring user listings across the UI.
 
 ---
+
+Date: 2025-11-16
+Error Encountered: RFID registration modal stalled on "Continue & Wait for Tap" even after the confirmation tap, leaving cards stuck in the unregistered list.
+Date of Fix: 2025-11-16
+Details: Backend lacked a way to verify the follow-up scan, so the frontend never received a success signal. Added `/api/rfid/check-recent-scan/:tagId` to validate confirmation taps, filtered registered tags out of the unregistered scan feed, and refactored `RfidCardManagement.vue` to call the new endpoint before completing registration. Frontend service now normalizes the response and closes the loop so cards move to the registered list immediately after the confirmation tap.
+
+---

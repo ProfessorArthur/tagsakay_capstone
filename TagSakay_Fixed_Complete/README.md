@@ -13,6 +13,12 @@ This firmware now supports **real-time WebSocket connections** for 5-10x faster 
 - 🎯 **Auto-reconnection** - WebSocket automatically reconnects if disconnected
 - 💓 **Heartbeat** - Keeps connection alive, server tracks device status
 
+In addition, an HTTP control path mirrors the Diagnostics utility:
+
+- 📡 Command Polling: device polls `GET /api/devices/:deviceId/commands` every 5s (`COMMAND_POLL_INTERVAL`).
+- 🫀 Heartbeats: device posts `/api/devices/:deviceId/heartbeat` every 30s (`HEARTBEAT_INTERVAL`).
+- 🔁 State Sync: heartbeat includes `registrationMode`, `scanMode`, and `pendingRegistrationTagId` so the admin UI reflects device state quickly even without WebSockets.
+
 ---
 
 ## 📦 Required Libraries
@@ -114,6 +120,21 @@ TagSakay_Fixed_Complete/
 2. Fall back to HTTP POST /api/rfid/scan
    ↓
 3. Same functionality, slower (200-500ms)
+
+### HTTP Control Path (Admin → Device)
+
+```
+
+1. Admin toggles registration/scan mode in dashboard
+   ↓ (within ~5s)
+2. Device polls /api/devices/:deviceId/commands
+   ↓
+3. Device updates local flags and UI (registration mode, expected tag)
+   ↓ (every 30s)
+4. Device posts heartbeat with flags so admin reflects current state
+
+```
+
 ```
 
 ---
@@ -260,7 +281,11 @@ In `Config.h`:
 ### Adjust Heartbeat Interval
 
 ```cpp
-#define WS_PING_INTERVAL 30000  // 30 seconds (default)
+// WebSocket ping (if WS enabled)
+#define WS_PING_INTERVAL 30000     // 30 seconds (default)
+// HTTP heartbeat (control path)
+#define HEARTBEAT_INTERVAL 30000   // 30 seconds (default)
+#define COMMAND_POLL_INTERVAL 5000 // 5 seconds (default)
 ```
 
 ### Adjust Reconnect Interval

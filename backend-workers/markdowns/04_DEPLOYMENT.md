@@ -42,6 +42,8 @@ npm run db:migrate         # Database migrations
 npm run security:audit     # Security validation
 ```
 
+> ⚙️ **Migration Reminder:** Before running `npm run db:migrate` against staging or production, confirm every new SQL file is registered in `drizzle/meta/_journal.json` (or run `npm run db:sync-migrations` to generate the entry). Only journaled tags are applied, so keep the journal in sync first.
+
 ### 2. Configuration Validation
 
 **Backend Configuration:**

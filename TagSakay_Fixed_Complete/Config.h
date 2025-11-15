@@ -63,12 +63,14 @@
 // =======================
 
 #define HEARTBEAT_INTERVAL 30000  // 30 seconds
+#define COMMAND_POLL_INTERVAL 5000 // 5 seconds - poll server commands
 #define REGISTRATION_MODE_TIMEOUT 120000  // 2 minutes
 #define KEY_INPUT_TIMEOUT 5000  // 5 seconds
 #define TEST_MODE_TIMEOUT 10000  // 10 seconds
 #define RFID_DEBOUNCE_MS 1500  // 1.5 seconds
 #define KEYPAD_DEBOUNCE_MS 300  // 300ms
-#define HEARTBEAT_INTERVAL_MS 60000  // 1 minute
+// Legacy alias (kept for backward compatibility). Use HEARTBEAT_INTERVAL.
+#define HEARTBEAT_INTERVAL_MS HEARTBEAT_INTERVAL
 #define MENU_REMINDER_INTERVAL 30000  // 30 seconds
 
 // =======================

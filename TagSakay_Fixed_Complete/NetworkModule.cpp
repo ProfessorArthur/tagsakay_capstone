@@ -540,3 +540,97 @@ bool syncDeviceProfile() {
 
   return true;
 }
+
+bool pollServerCommands() {
+  String endpoint = "/api/devices/" + deviceId + "/commands";
+
+  ApiResponse response = makeApiRequest(endpoint, "", "GET");
+  if (response.result != API_SUCCESS) {
+    Serial.printf("[POLL] Command poll failed (HTTP %d)\n", response.httpCode);
+    return false;
+  }
+
+  StaticJsonDocument<2048> doc;
+  DeserializationError error = deserializeJson(doc, response.data);
+  if (error) {
+    Serial.print("[POLL] JSON parse error: ");
+    Serial.println(error.c_str());
+    return false;
+  }
+
+  if (!doc["success"]) {
+    Serial.println("[POLL] Response missing success=true");
+    return false;
+  }
+
+  bool refreshNeeded = false;
+  JsonObject data = doc["data"];
+
+  // Sync device status flags from server if present
+  if (!data["deviceStatus"].isNull()) {
+    JsonObject status = data["deviceStatus"];
+
+    if (!status["registrationMode"].isNull()) {
+      bool reg = status["registrationMode"].as<bool>();
+      if (reg != registrationMode) {
+        registrationMode = reg;
+        if (registrationMode) {
+          registrationModeStartTime = millis();
+        } else {
+          registrationModeStartTime = 0;
+          expectedRegistrationTagId = "";
+        }
+        Serial.printf("[POLL] Registration mode %s by server\n", reg ? "ENABLED" : "DISABLED");
+        refreshNeeded = true;
+      }
+    }
+
+    if (!status["scanMode"].isNull()) {
+      bool scan = status["scanMode"].as<bool>();
+      if (scan != deviceConfig.scanMode) {
+        deviceConfig.scanMode = scan;
+        Serial.printf("[POLL] Scan mode %s by server\n", scan ? "ENABLED" : "DISABLED");
+        refreshNeeded = true;
+      }
+    }
+  }
+
+  // Process commands array
+  if (!data["commands"].isNull() && data["commands"].is<JsonArray>()) {
+    JsonArray commands = data["commands"].as<JsonArray>();
+    for (JsonObject cmd : commands) {
+      String action = cmd["action"].as<String>();
+      if (action == "enable_registration") {
+        String tagId = cmd["tagId"].as<String>();
+        registrationMode = true;
+        expectedRegistrationTagId = tagId;
+        registrationModeStartTime = millis();
+        Serial.printf("[POLL] Enable registration for tag: %s\n", tagId.c_str());
+        refreshNeeded = true;
+      } else if (action == "disable_registration") {
+        registrationMode = false;
+        expectedRegistrationTagId = "";
+        Serial.println("[POLL] Disable registration");
+        refreshNeeded = true;
+      } else if (action == "scan_mode") {
+        bool enabled = cmd["enabled"].isNull() ? deviceConfig.scanMode : cmd["enabled"].as<bool>();
+        deviceConfig.scanMode = enabled;
+        Serial.printf("[POLL] Scan mode set %s\n", enabled ? "ENABLED" : "DISABLED");
+        refreshNeeded = true;
+      }
+    }
+  }
+
+  if (refreshNeeded) {
+    // Minimal UI nudge to reflect mode changes
+    if (registrationMode) {
+      indicateRegistrationMode();
+      updateFooter("Registration mode enabled");
+    } else {
+      indicateReady();
+      updateFooter("Normal scanning mode");
+    }
+  }
+
+  return true;
+}
